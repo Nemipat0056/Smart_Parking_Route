@@ -2097,6 +2097,7 @@ function updateStatistics() {
      const status = statusConfig[randomStatus];
 
      // Enhanced info window with status
+     const spotName = spot.RoadSegmentDescription.length > 35 ? spot.RoadSegmentDescription.substring(0, 35) + '...' : spot.RoadSegmentDescription;
      const infoWindow = new google.maps.InfoWindow({
        content: `
          <div style="padding: 12px; max-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
@@ -2125,6 +2126,14 @@ function updateStatistics() {
                <span style="font-weight: 700; color: #1a202c;">🕒 ${spot.LastUpdated}</span>
              </div>
            </div>
+            <div style="margin-top: 12px;">
+              <button onclick="navigateToParking(${spot.Latitude}, ${spot.Longitude}, '${spot.RoadSegmentDescription.replace(/'/g, "\\'")}'); google.maps.event.trigger(arguments[0], 'closeclick');" 
+                      style="width: 100%; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.3s ease;"
+                      onmouseover="this.style.background='linear-gradient(135deg, #059669, #047857)'; this.style.transform='translateY(-1px)'"
+                      onmouseout="this.style.background='linear-gradient(135deg, #10b981, #059669)'; this.style.transform='translateY(0)'">
+                🧭 Navigate Here
+              </button>
+            </div>
          </div>
        `
      });
