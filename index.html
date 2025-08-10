@@ -1356,7 +1356,7 @@ function updateStatistics() {
    debugLog('Starting parking data load process...');
 
    // S3 URL for the CSV file
-   const S3_CSV_URL = 'https://smartrouteparking.s3.ap-southeast-2.amazonaws.com/on-street-parking-bays.csv';
+   const S3_CSV_URL = 'https://smartrouteparking.s3.ap-southeast-2.amazonaws.com/on-street-parking-bay-sensors.csv';
 
    // Try S3 first, then local file, then fallback to sample data
 
@@ -1416,7 +1416,7 @@ function updateStatistics() {
    try {
      if (window.fs && window.fs.readFile) {
        debugLog('Attempting to read local CSV file...');
-       const csvContent = await window.fs.readFile('on-street-parking-bays.csv', { encoding: 'utf8' });
+       const csvContent = await window.fs.readFile('on-street-parking-bay-sensors.csv', { encoding: 'utf8' });
 
        if (csvContent && csvContent.length > 100) {
          debugLog(`SUCCESS: CSV loaded locally! Content length: ${csvContent.length} characters`);
@@ -1467,7 +1467,7 @@ function updateStatistics() {
      debugLog('CSV Headers found:', headers);
 
      // Verify we have the expected columns
-     const requiredColumns = ['Latitude', 'Longitude', 'RoadSegmentDescription'];
+     const requiredColumns = ['Location', 'Status_Description'];
      const missingColumns = requiredColumns.filter(col => !headers.includes(col));
      if (missingColumns.length > 0) {
        debugLog('ERROR: Missing required columns:', missingColumns);
@@ -1516,22 +1516,36 @@ function updateStatistics() {
        headers.forEach((header, index) => {
          let value = values[index] || '';
 
-         if (header === 'RoadSegmentID' && value) {
+         if (header === 'Zone_Number' && value) {
            spot[header] = parseInt(value);
          } else if (header === 'KerbsideID' && value) {
-           spot[header] = value ? parseInt(value) : null;
-         } else if ((header === 'Latitude' || header === 'Longitude') && value) {
-           spot[header] = parseFloat(value);
-         } else {
+          spot[header] = parseInt(value);
+         } else if (header === 'Location' && value) {
+          const coords = value.replace(/"/g, '').split(','); 
+          if (coords.length === 2) {
+            spot.lat = parseFloat(coords[0].trim());
+            spot.lon = parseFloat(coords[1].trim());
+           }
            spot[header] = value;
+         } else if (header === 'Status_Description' && value) {
+           spot[header] = value.toLowerCase();
          }
        });
 
+       spot.Latitude = spot.lat;
+       spot.Longitude = spot.lon;
+       spot.RoadSegmentDescription = `Parking Bay ${spot.KerbsideID || 'Unknown'} (Zone ${spot.Zone_Number || 'N/A'})`;
+       spot.RoadSegmentID = spot.KerbsideID || spot.Zone_Number;
+       spot.LastUpdated = spot.Lastupdated || spot.Status_Timestamp || new Date().toISOString().split('T')[0];
+       spot.st_marker_id = spot.KerbsideID;
+       spot.bay_id = spot.KerbsideID;
+
+
        // Validate the row has required data
-       if (spot.Latitude && spot.Longitude && spot.RoadSegmentDescription &&
-           !isNaN(spot.Latitude) && !isNaN(spot.Longitude) &&
-           spot.Latitude >= -39 && spot.Latitude <= -37 &&
-           spot.Longitude >= 144 && spot.Longitude <= 146) {
+       if (spot.lat && spot.lon && spot.Location &&
+           !isNaN(spot.lat) && !isNaN(spot.lon) &&
+           spot.lat >= -39 && spot.lat <= -37 &&
+           spot.lon >= 144 && spot.lon <= 146) {
          melbourneParkingData.push(spot);
          validRows++;
        }
@@ -1797,13 +1811,29 @@ function updateStatistics() {
 
    // Use CSV data to find nearby parking spots
    const nearbySpots = findNearbyParkingSpots(location.lat(), location.lng(), maxDistance);
-
    if (nearbySpots && nearbySpots.length > 0) {
-     // Add random status to each spot for filtering
-     const spotsWithStatus = nearbySpots.map(spot => ({
-       ...spot,
-       status: ['free', 'occupied', 'reserved'][Math.floor(Math.random() * 3)]
-     }));
+     
+    // Add status based on sensor data or generate random status
+     const spotsWithStatus = nearbySpots.map(spot => {
+      let finalStatus = 'free'; // default 
+      if (spot.Status_Description) {
+        if (spot.Status_Description.toLowerCase() === 'unoccupied') {
+          finalStatus = 'free';
+        } else if (spot.Status_Description.toLowerCase() === 'present') {
+          finalStatus = 'occupied';
+        } else {
+          finalStatus = ['free', 'occupied', 'reserved'][Math.floor(Math.random() * 3)];
+        }
+      } else {
+        // If no sensor data, assign random status
+        finalStatus = ['free', 'occupied', 'reserved'][Math.floor(Math.random() * 3)];
+      }
+      return {
+        ...spot,
+        status: finalStatus
+      };
+     });
+     
 
      // Filter based on parking type if needed
      const parkingType = document.getElementById('parkingTypeSelect').value;
@@ -1876,12 +1906,24 @@ function updateStatistics() {
      const streetName = spot.RoadSegmentDescription ?
        spot.RoadSegmentDescription.split(' between')[0] : 'Parking Spot';
 
+     // Check if this spot has real sensor data
+     const hasRealStatus = spot.Status_Description && ['unoccupied', 'present'].includes(spot.Status_Description.toLowerCase());
+     
+     // Use real sensor status if available, otherwise use assigned status
+     let finalStatus;
+     if (hasRealStatus) {
+        finalStatus = spot.Status_Description.toLowerCase() === 'unoccupied' ? 'free' : 'occupied';
+      } else {
+        finalStatus = spot.status || 'free';
+      }
+
+
      // Determine if updated recently (within last year)
      const lastUpdated = new Date(spot.LastUpdated);
      const isRecent = lastUpdated > new Date('2023-01-01');
 
      // Use the status from the spot (added during search)
-     const randomStatus = spot.status || 'free';
+     //const finalStatus = spot.status || 'free';
 
      // Status display text and styling
      const statusConfig = {
@@ -1890,7 +1932,7 @@ function updateStatistics() {
        reserved: { text: 'Reserved', class: 'status-reserved', emoji: '🟡' }
      };
 
-     const status = statusConfig[randomStatus];
+     const status = statusConfig[finalStatus];
 
      resultsHTML += `
        <div class="parking-spot">
@@ -1900,7 +1942,7 @@ function updateStatistics() {
          </h5>
          <div class="parking-info">
            <span>Status</span>
-           <span style="background: ${randomStatus === 'free' ? 'rgba(16, 185, 129, 0.1); color: #059669' : randomStatus === 'occupied' ? 'rgba(239, 68, 68, 0.1); color: #dc2626' : 'rgba(245, 158, 11, 0.1); color: #d97706'}">${status.emoji} ${status.text}</span>
+           <span style="background: ${finalStatus === 'free' ? 'rgba(16, 185, 129, 0.1); color: #059669' : finalStatus === 'occupied' ? 'rgba(239, 68, 68, 0.1); color: #dc2626' : 'rgba(245, 158, 11, 0.1); color: #d97706'}">${status.emoji} ${status.text}</span>
          </div>
          <div class="parking-info">
            <span>Location</span>
@@ -1911,13 +1953,18 @@ function updateStatistics() {
            <span>📍 ${spot.distance}m away</span>
          </div>
          <div class="parking-info">
-           <span>Segment ID</span>
-           <span>#${spot.RoadSegmentID}</span>
+           <span>Bay ID</span>
+           <span>#${spot.KerbsideID  || spot.RoadSegmentID}</span>
          </div>
+         <div class="parking-info">
+           <span>Zone</span>
+           <span>🏢 ${spot.Zone_Number || 'N/A'}</span>
+         </div>         
          <div class="parking-info">
            <span>Last Updated</span>
            <span>🕒 ${spot.LastUpdated}</span>
          </div>
+         ${hasRealStatus ? '<div class="eco-badge">📡 Real Sensor Data</div>' : '<div class="ev-badge">🎯 Estimated Status</div>'}
          ${isRecent ? '<div class="eco-badge">✅ Recently Updated</div>' : ''}
          ${spot.KerbsideID ? '<div class="ev-badge">🏷️ Tracked Spot</div>' : ''}
          <div class="parking-actions">
@@ -2059,7 +2106,14 @@ function updateStatistics() {
  function addAllParkingMarkers(spots) {
    spots.forEach((spot, index) => {
      // Use the status from the spot (added during search)
-     const randomStatus = spot.status || 'free';
+     let finalStatus;
+     if (spot.Status_Description && ['unoccupied', 'present'].includes(spot.Status_Description.toLowerCase())) {
+      finalStatus = spot.Status_Description.toLowerCase() === 'unoccupied' ? 'free' : 'occupied';
+     } else {
+      finalStatus = spot.status || 'free';
+     }
+
+      const hasRealStatus = spot.Status_Description && ['unoccupied', 'present'].includes(spot.Status_Description.toLowerCase());
 
      // Marker colors based on status
      const markerColors = {
@@ -2068,7 +2122,7 @@ function updateStatistics() {
        reserved: '#f59e0b'    // Amber/Orange
      };
 
-     const markerColor = markerColors[randomStatus];
+     const markerColor = markerColors[finalStatus];
 
      const marker = new google.maps.Marker({
        position: { lat: spot.Latitude, lng: spot.Longitude },
@@ -2094,7 +2148,7 @@ function updateStatistics() {
        reserved: { text: 'Reserved', emoji: '🟡', color: '#f59e0b' }
      };
 
-     const status = statusConfig[randomStatus];
+     const status = statusConfig[finalStatus];
 
      // Enhanced info window with status
      const spotName = spot.RoadSegmentDescription.length > 35 ? spot.RoadSegmentDescription.substring(0, 35) + '...' : spot.RoadSegmentDescription;
@@ -2109,6 +2163,7 @@ function updateStatistics() {
              <div style="display: flex; align-items: center; gap: 6px;">
                <span style="font-size: 14px;">${status.emoji}</span>
                <strong style="color: ${status.color}; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px;">${status.text}</strong>
+               ${hasRealStatus ? '<span style="background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">📡 LIVE</span>' : ''}
              </div>
            </div>
 
@@ -2117,6 +2172,14 @@ function updateStatistics() {
                <span style="color: #6b7280; font-weight: 600;">Distance:</span>
                <span style="font-weight: 700; color: #1a202c;">📍 ${spot.distance}m</span>
              </div>
+             <div style="display: flex; justify-content: space-between;">
+               <span style="color: #6b7280; font-weight: 600;">Bay ID:</span>
+               <span style="font-weight: 700; color: #1a202c;">#${spot.KerbsideID || spot.RoadSegmentID}</span>
+             </div>
+             <div style="display: flex; justify-content: space-between;">
+               <span style="color: #6b7280; font-weight: 600;">Zone:</span>
+               <span style="font-weight: 700; color: #1a202c;">🏢 ${spot.Zone_Number || 'N/A'}</span>
+             </div>             
              <div style="display: flex; justify-content: space-between;">
                <span style="color: #6b7280; font-weight: 600;">Segment ID:</span>
                <span style="font-weight: 700; color: #1a202c;">#${spot.RoadSegmentID}</span>
