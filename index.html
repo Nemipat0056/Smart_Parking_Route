@@ -1627,7 +1627,7 @@ function updateStatistics() {
 
    debugLog('Location selected:', place.name);
    parkingMap.setCenter(place.geometry.location);
-   parkingMap.setZoom(16);
+   adjustMapZoomForDistance();
 
    // Clear previous status and show searching
    parkingSearchStatus.innerText = '🔍 Searching for parking near selected location...';
@@ -1674,6 +1674,8 @@ function updateStatistics() {
    if (location) {
      debugLog('Distance filter changed, re-searching...');
      searchParking();
+   } else {
+    adjustMapZoomForDistance();
    }
  });
 
@@ -1741,7 +1743,7 @@ function updateStatistics() {
      if (status === 'OK') {
        const searchLocation = results[0].geometry.location;
        parkingMap.setCenter(searchLocation);
-       parkingMap.setZoom(16);
+       adjustMapZoomForDistance();
 
        searchNearbyParking(searchLocation);
      } else {
@@ -1795,6 +1797,34 @@ function updateStatistics() {
    }).sort((a, b) => a.distance - b.distance);
  }
 
+ function adjustMapZoomForDistance() {
+  const maxDistance = parseFloat(document.getElementById('maxDistanceSelect').value);
+  let zoomLevel = 10;
+  
+  if (maxDistance <= 0.5) {
+    zoomLevel = 17; // Very close zoom
+  } else if (maxDistance <= 1) {
+    zoomLevel = 16; // Close zoom
+  } else if (maxDistance <= 2) {
+    zoomLevel = 15; // Medium-close zoom
+  } else if (maxDistance <= 5) {
+    zoomLevel = 13; // Medium zoom
+  } else if (maxDistance <= 10) {
+    zoomLevel = 11; // Wide zoom
+  } else {
+    zoomLevel = 10; // Widest zoom for all Melbourne
+  }
+
+  debugLog(`Adjusting map zoom to level ${zoomLevel} for ${maxDistance}km distance`);
+
+  if (parkingMap) {
+    parkingMap.setZoom(zoomLevel);
+  }
+  if (greenParkingMap) {
+    greenParkingMap.setZoom(zoomLevel);
+  }
+}
+
  function searchNearbyParking(location) {
    debugLog('Searching for parking near location:', location.toString());
 
@@ -1804,6 +1834,9 @@ function updateStatistics() {
    parkingResultsSection.style.display = 'none';
 
    const maxDistance = parseFloat(document.getElementById('maxDistanceSelect').value);
+
+   parkingMap.setCenter(location);
+   adjustMapZoomForDistance();
 
    // Update status
    parkingSearchStatus.innerText = '🔍 Finding parking spots nearby...';
@@ -2084,14 +2117,10 @@ function updateStatistics() {
      addAllParkingMarkers(allMarkerSpots);
      debugLog(`Added ${allMarkerSpots.length} markers from real data within ${maxDistance}km range`);
 
-     // Adjust map zoom based on distance filter
-     let zoomLevel = 10;
-     if (maxDistance <= 1) zoomLevel = 15;
-     else if (maxDistance <= 2) zoomLevel = 14;
-     else if (maxDistance <= 5) zoomLevel = 12;
-     else if (maxDistance <= 10) zoomLevel = 11;
+     adjustMapZoomForDistance();
 
-     parkingMap.setZoom(zoomLevel);
+     // Adjust map zoom based on distance filter
+     
 
    } else {
      debugLog('No real parking spots available for display within distance');
