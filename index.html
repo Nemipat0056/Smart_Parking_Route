@@ -1817,11 +1817,11 @@
      displayCSVParkingResults(topResults, location);
 
      // Add markers ONLY for the filtered results (same availability filter applied)
-     const markerResults = filteredSpots.slice(0, 100);
+     const markerResults = filteredSpots;
      addAllParkingMarkers(markerResults);
 
      const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
-     parkingSearchStatus.innerText = `✅ Found ${topResults.length}${availabilityText} parking spots nearby (${markerResults.length} shown on map)`;
+     parkingSearchStatus.innerText = `✅ Found ${markerResults.length}${availabilityText} parking spots nearby (${markerResults.length} shown on map)`;
      parkingSearchStatus.className = 'success';
      parkingResultsSection.style.display = 'block';
    } else {
@@ -1840,7 +1840,7 @@
    const availabilityFilter = document.getElementById('availabilitySelect').value;
    const filterText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
    document.getElementById('parkingResultsCount').innerText =
-     `Found ${spots.length}${filterText} real parking spots from Melbourne data`;
+     `Found ${spots.length}${filterText} best parking spots from Melbourne data`;
 
    // Create parking spot cards
    let resultsHTML = '';
