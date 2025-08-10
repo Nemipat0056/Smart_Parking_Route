@@ -583,7 +583,36 @@
         padding: 1rem 1.2rem;
         font-size: 0.95rem;
       }
-    }
+
+      /* notes & insights */
+      .muted-note{color:#6b7280;font-size:.85rem;margin-top:.35rem}
+      .insight-box{
+        background:rgba(102,126,234,.06);
+        border:1px solid rgba(102,126,234,.15);
+        color:#374151;
+        border-radius:12px;
+        padding:12px 14px;
+        margin:10px 0 16px 0;
+        line-height:1.55;
+      }
+      .insight-box em{font-style:normal;color:#667eea;font-weight:600}
+      }
+      
+      /* Statistics charts grid */
+      .stats-charts-grid{
+        display:grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+      }
+
+      /* 手机端：改为单列，并给图更高的可视高度 */
+      @media (max-width: 768px){
+        .stats-charts-grid{ grid-template-columns: 1fr !important; }
+        #stats-chart1, #stats-chart2{ height: 420px !important; }
+      }
+
+
+
   </style>
 </head>
 <body>
@@ -680,12 +709,12 @@
 
       <!-- Tab Content: Statistics -->
       <div class="tab-content" id="statistics-tab">
-        <h3>📊 Melbourne Traffic & Parking Statistics</h3>
+        <h3>📊 Melbourne Traffic & Population Statistics</h3>
 
         <!-- Statistics Controls Section -->
         <div class="search-section">
           <h4>Interactive Analysis Controls</h4>
-          <p style="color: #6b7280; margin-bottom: 1.5rem;">Pick a region and year, enter your household size and vehicles. See how you compare to the regional average.</p>
+          <p style="color: #6b7280; margin-bottom: 1.5rem;">Pick a region and year, enter your household vehicles. See where your household sits in the distribution and what it means for congestion.</p>
 
           <div class="parking-filters">
             <label>Region:
@@ -706,10 +735,6 @@
               </select>
             </label>
 
-            <label>Household size:
-              <input id="stats-hhsize" type="number" min="1" value="2" style="padding: 0.8rem 1rem;"/>
-            </label>
-
             <label>Vehicles in household:
               <select id="stats-hhcars">
                 <option value="0">0</option>
@@ -720,7 +745,6 @@
             </label>
           </div>
 
-          <button id="updateStatsBtn" style="margin-top: 1.5rem; max-width: 200px;">Update Analysis</button>
         </div>
 
         <!-- KPI Display Section -->
@@ -733,6 +757,7 @@
                 <span>Current Population</span>
                 <span id="stats-pop" style="font-size: 1.2rem; font-weight: bold;">-</span>
               </div>
+              <p class="muted-note">Higher population with limited road space increases congestion pressure.</p>
             </div>
 
             <div class="parking-spot">
@@ -741,19 +766,17 @@
                 <span>Vehicles per 1,000 people</span>
                 <span id="stats-vp1000" style="font-size: 1.2rem; font-weight: bold;">-</span>
               </div>
+              <p class="muted-note">More cars per 1,000 people means higher road use and potential traffic delays.</p>
             </div>
 
             <div class="parking-spot">
               <h5>🏠 Your Household</h5>
-              <div class="parking-info">
-                <span>Your intensity (cars/1000)</span>
-                <span id="stats-hhvp1000" style="font-size: 1.2rem; font-weight: bold;">-</span>
-              </div>
+              
               <div class="parking-info">
                 <span>Your percentile</span>
                 <span id="stats-percentile" style="font-size: 1.2rem; font-weight: bold;">-</span>
               </div>
-              <div id="stats-compareText" class="info" style="margin-top: 1rem; font-size: 0.9rem;"></div>
+              <p class="muted-note">Percentile shows the share of households with <em>equal or fewer</em> cars than yours.</p>
             </div>
           </div>
         </div>
@@ -761,7 +784,10 @@
         <!-- Charts Section -->
         <div class="search-section">
           <h4>Visual Analysis</h4>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+          <div id="stats-insights" class="insight-box">
+            In {region}, the population grew by {X%} from {firstYear} to {lastYear}, while household vehicle ownership grew by {Y%}. This indicates that {summary}.
+          </div>
+          <div class="stats-charts-grid">
             <div id="stats-chart1" class="map-container" style="height: 400px; background: white;"></div>
             <div id="stats-chart2" class="map-container" style="height: 400px; background: white;"></div>
           </div>
@@ -779,9 +805,7 @@
                 <a href="https://profile.id.com.au/melbourne/car-ownership?EndYear=2011&DataType=EN" target="_blank" style="color: #667eea;">profile.id: Car ownership</a>
               </li>
             </ul>
-            <p style="margin-top: 1rem; font-size: 0.9rem; color: #6b7280;">
-              <strong>Note:</strong> Percentile is approximated using the distribution of households by number of vehicles. It indicates the share of households with equal or fewer cars than your selection in the chosen region and year.
-            </p>
+           
           </div>
         </div>
       </div>
@@ -948,12 +972,20 @@
        // Add active class to clicked button and corresponding content
        button.classList.add('active');
        document.getElementById(`${targetTab}-tab`).classList.add('active');
-     });
+     
+    // Initialize statistics when tab is clicked
+    if (targetTab === 'statistics') {
+        if (!initStatistics._initialized) {
+          initStatistics();
+          initStatistics._initialized = true;
+        } else {
+          setTimeout(updateStatistics, 0);
+        }
+      } 
+     
+      });
    });
-   // Initialize statistics when tab is clicked
-   if (targetTab === 'statistics') {
-     setTimeout(() => initStatistics(), 100);
-   }
+  
  }
 
  // Statistics Functions
@@ -1066,36 +1098,64 @@
    }, { responsive: true });
  }
 
- function updateStatistics() {
-   const region = document.getElementById('stats-region').value;
-   const year = document.getElementById('stats-year').value;
-   const hhsize = Math.max(1, parseInt(document.getElementById('stats-hhsize').value || '1'));
-   const hhcars = parseInt(document.getElementById('stats-hhcars').value);
+function updateStatistics() {
+  const region = document.getElementById('stats-region').value;
+  const year   = document.getElementById('stats-year').value;
+  const hhcars = parseInt(document.getElementById('stats-hhcars').value);
 
-   const pop = STATS_DATA.regions[region].pop_series[year];
-   const vp1000 = STATS_DATA.regions[region].vehicles_per_1000[year];
-   const hh_vp1000 = (hhcars / hhsize) * 1000;
 
-   document.getElementById('stats-pop').textContent = numberWithCommas(pop);
-   document.getElementById('stats-vp1000').textContent = vp1000.toFixed(1);
-   document.getElementById('stats-hhvp1000').textContent = hh_vp1000.toFixed(0);
+  const pop    = STATS_DATA.regions[region].pop_series[year];
+  const vp1000 = STATS_DATA.regions[region].vehicles_per_1000[year];
+  const pct    = computePercentile(region, year, hhcars); 
 
-   const pct = computePercentile(region, year, hhcars);
-   document.getElementById('stats-percentile').textContent = pct.toFixed(0) + '%';
 
-   let compare = '';
-   if (hh_vp1000 > vp1000) {
-     compare = 'Your household vehicle intensity is above the regional average — likely to rely more on private car trips.';
-   } else if (Math.abs(hh_vp1000 - vp1000) < 30) {
-     compare = 'Your household vehicle intensity is close to the regional average.';
-   } else {
-     compare = 'Your household vehicle intensity is below the regional average — more likely to use public/active transport.';
-   }
-   document.getElementById('stats-compareText').textContent = compare;
+  document.getElementById('stats-pop').textContent    = numberWithCommas(pop);
+  document.getElementById('stats-vp1000').textContent = vp1000.toFixed(1);
+  document.getElementById('stats-percentile').textContent = pct.toFixed(0) + '%';
 
-   drawStatsTrend(region);
-   drawStatsCategoryBar(region, year, hhcars);
- }
+
+  drawStatsTrend(region);                     
+  drawStatsCategoryBar(region, year, hhcars); 
+
+  (function renderInsights(){
+    const firstYear = STATS_DATA.years[0];
+    const pop0 = STATS_DATA.regions[region].pop_series[firstYear];
+    const pop1 = STATS_DATA.regions[region].pop_series[year];
+    const veh0 = STATS_DATA.regions[region].vehicles_total[firstYear];
+    const veh1 = STATS_DATA.regions[region].vehicles_total[year];
+
+    const popChg = pop0 ? ((pop1 - pop0) / pop0 * 100).toFixed(1) : '0.0';
+    const vehChg = veh0 ? ((veh1 - veh0) / veh0 * 100).toFixed(1) : '0.0';
+
+    let trendLine = '';
+    if (parseFloat(vehChg) - parseFloat(popChg) > 3) {
+      trendLine = 'car ownership has outpaced population growth, which may intensify congestion.';
+    } else if (parseFloat(popChg) - parseFloat(vehChg) > 3) {
+      trendLine = 'population has grown faster than car ownership, which may slightly ease congestion pressure.';
+    } else {
+      trendLine = 'car ownership and population have grown at a similar rate, maintaining current congestion patterns.';
+    }
+
+    let youLine = '';
+    if (pct >= 70) {
+      youLine = `Your household is at the ${pct.toFixed(0)}th percentile — higher vehicle ownership than most households in ${region}.`;
+    } else if (pct <= 30) {
+      youLine = `Your household is at the ${pct.toFixed(0)}th percentile — lower vehicle ownership than most households in ${region}.`;
+    } else {
+      youLine = `Your household sits around the middle (the ${pct.toFixed(0)}th percentile), close to the regional norm.`;
+    }
+
+    const el = document.getElementById('stats-insights');
+    if (el) {
+      el.innerHTML = `
+        <strong>Insights:</strong>
+        In <em>${region}</em>, population grew by <em>${popChg}%</em> from <em>${firstYear}</em> to <em>${year}</em>,
+        while household vehicle ownership grew by <em>${vehChg}%</em>. This suggests that ${trendLine}
+        <br/>${youLine}
+      `;
+    }
+  })();
+}
 
  // Google Maps Configuration
  let parkingMap;
@@ -1639,32 +1699,14 @@
 
  // Statistics event listeners
  setTimeout(() => {
-   const updateStatsBtn = document.getElementById('updateStatsBtn');
    const statsRegion = document.getElementById('stats-region');
-   const statsYear = document.getElementById('stats-year');
-   const statsHhsize = document.getElementById('stats-hhsize');
-   const statsHhcars = document.getElementById('stats-hhcars');
+  const statsYear = document.getElementById('stats-year');
+  const statsHhcars = document.getElementById('stats-hhcars');
 
-   if (updateStatsBtn) {
-     updateStatsBtn.addEventListener('click', updateStatistics);
-   }
-
-   if (statsRegion) {
-     statsRegion.addEventListener('change', updateStatistics);
-   }
-
-   if (statsYear) {
-     statsYear.addEventListener('change', updateStatistics);
-   }
-
-   if (statsHhsize) {
-     statsHhsize.addEventListener('input', updateStatistics);
-   }
-
-   if (statsHhcars) {
-     statsHhcars.addEventListener('change', updateStatistics);
-   }
- }, 1000);
+  if (statsRegion) statsRegion.addEventListener('change', updateStatistics);
+  if (statsYear)   statsYear.addEventListener('change', updateStatistics);
+  if (statsHhcars) statsHhcars.addEventListener('change', updateStatistics);
+}, 1000);
 
  function searchParking() {
    const location = parkingLocationInput.value.trim();
@@ -1749,23 +1791,9 @@
 
    const maxDistance = parseFloat(document.getElementById('maxDistanceSelect').value);
 
-   // Adjust map zoom based on distance filter
-   let zoomLevel = 10;
-   if (maxDistance <= 0.5) zoomLevel = 17;
-   else if (maxDistance <= 1) zoomLevel = 16;
-   else if (maxDistance <= 2) zoomLevel = 15;
-   else if (maxDistance <= 5) zoomLevel = 13;
-   else if (maxDistance <= 10) zoomLevel = 12;
-   else if (maxDistance <= 20) zoomLevel = 10;
-
-   // Update map center and zoom
-   parkingMap.setCenter(location);
-   parkingMap.setZoom(zoomLevel);
-
    // Update status
    parkingSearchStatus.innerText = '🔍 Finding parking spots nearby...';
    parkingSearchStatus.className = 'info';
-
 
    // Use CSV data to find nearby parking spots
    const nearbySpots = findNearbyParkingSpots(location.lat(), location.lng(), maxDistance);
@@ -1812,7 +1840,6 @@
 
      // Limit to top 20 results for better performance
      const topResults = filteredSpots.slice(0, 20);
-     
 
      displayCSVParkingResults(topResults, location);
 
@@ -1834,7 +1861,7 @@
    // Re-enable search button
    searchParkingBtn.disabled = false;
  }
- 
+
  function displayCSVParkingResults(spots, searchLocation) {
    // Update results count
    const availabilityFilter = document.getElementById('availabilitySelect').value;
