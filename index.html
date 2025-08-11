@@ -1843,25 +1843,6 @@ function updateStatistics() {
        debugLog('FETCH ERROR: Network or URL issue');
      }
    }
-
-   // Method 2: Try loading from local file system (for development)
-   try {
-     if (window.fs && window.fs.readFile) {
-       debugLog('Attempting to read local CSV file...');
-       const csvContent = await window.fs.readFile('on-street-parking-bay-sensors.csv', { encoding: 'utf8' });
-
-       if (csvContent && csvContent.length > 100) {
-         debugLog(`SUCCESS: CSV loaded locally! Content length: ${csvContent.length} characters`);
-         await parseCSVContent(csvContent);
-         return;
-       }
-     }
-   } catch (error) {
-     debugLog('Local CSV file loading failed:', error.message);
-   }
-
-   // Method 3: Fallback to sample data with instructions
-   debugLog('All loading methods failed, using sample data');
    showS3Instructions();
  }
 
