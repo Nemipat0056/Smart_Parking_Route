@@ -2179,53 +2179,43 @@ function updateStatistics() {
 
      const status = statusConfig[finalStatus];
 
-     // Enhanced info window with status
-     const spotName = spot.RoadSegmentDescription.length > 35 ? spot.RoadSegmentDescription.substring(0, 35) + '...' : spot.RoadSegmentDescription;
+
+
+     // Enhanced info window with status - more compact design
+     const spotName = spot.RoadSegmentDescription.length > 25 ? spot.RoadSegmentDescription.substring(0, 25) + '...' : spot.RoadSegmentDescription;
      const infoWindow = new google.maps.InfoWindow({
        content: `
-         <div style="padding: 12px; max-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-             <h5 style="margin: 0; color: #1a202c; font-size: 1.1rem; font-weight: 700;">🅿️ ${spot.RoadSegmentDescription.length > 35 ? spot.RoadSegmentDescription.substring(0, 35) + '...' : spot.RoadSegmentDescription}</h5>
-           </div>
+         <div style="padding: 10px; width: 240px; max-width: 240px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.3;">
+           <h5 style="margin: 0 0 8px 0; color: #1a202c; font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🅿️ ${spotName}</h5>
 
-           <div style="background: ${status.color}15; border-left: 4px solid ${status.color}; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px;">
-             <div style="display: flex; align-items: center; gap: 6px;">
-               <span style="font-size: 14px;">${status.emoji}</span>
-               <strong style="color: ${status.color}; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px;">${status.text}</strong>
-               ${hasRealStatus ? '<span style="background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">📡 LIVE</span>' : ''}
+           <div style="background: ${status.color}15; border-left: 3px solid ${status.color}; padding: 6px 8px; border-radius: 6px; margin-bottom: 8px;">
+             <div style="display: flex; align-items: center; gap: 4px;">
+               <span style="font-size: 12px;">${status.emoji}</span>
+               <strong style="color: ${status.color}; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.3px;">${status.text}</strong>
+               ${hasRealStatus ? '<span style="background: #10b981; color: white; padding: 1px 4px; border-radius: 3px; font-size: 0.6rem; margin-left: 4px;">LIVE</span>' : ''}
              </div>
            </div>
 
-           <div style="display: grid; gap: 6px; font-size: 0.85rem;">
+           <div style="display: grid; gap: 4px; font-size: 0.8rem; margin-bottom: 8px;">
              <div style="display: flex; justify-content: space-between;">
-               <span style="color: #6b7280; font-weight: 600;">Distance:</span>
-               <span style="font-weight: 700; color: #1a202c;">📍 ${spot.distance}m</span>
+               <span style="color: #6b7280; font-weight: 500;">Distance:</span>
+               <span style="font-weight: 600; color: #1a202c;">📍 ${spot.distance}m</span>
              </div>
              <div style="display: flex; justify-content: space-between;">
-               <span style="color: #6b7280; font-weight: 600;">Bay ID:</span>
-               <span style="font-weight: 700; color: #1a202c;">#${spot.KerbsideID || spot.RoadSegmentID}</span>
+               <span style="color: #6b7280; font-weight: 500;">Bay:</span>
+               <span style="font-weight: 600; color: #1a202c;">#${spot.KerbsideID || spot.RoadSegmentID}</span>
              </div>
              <div style="display: flex; justify-content: space-between;">
-               <span style="color: #6b7280; font-weight: 600;">Zone:</span>
-               <span style="font-weight: 700; color: #1a202c;">🏢 ${spot.Zone_Number || 'N/A'}</span>
-             </div>             
-             <div style="display: flex; justify-content: space-between;">
-               <span style="color: #6b7280; font-weight: 600;">Segment ID:</span>
-               <span style="font-weight: 700; color: #1a202c;">#${spot.RoadSegmentID}</span>
-             </div>
-             <div style="display: flex; justify-content: space-between;">
-               <span style="color: #6b7280; font-weight: 600;">Updated:</span>
-               <span style="font-weight: 700; color: #1a202c;">🕒 ${spot.LastUpdated}</span>
+               <span style="color: #6b7280; font-weight: 500;">Zone:</span>
+               <span style="font-weight: 600; color: #1a202c;">${spot.Zone_Number || 'N/A'}</span>
              </div>
            </div>
-            <div style="margin-top: 12px;">
-              <button onclick="navigateToParking(${spot.Latitude}, ${spot.Longitude}, '${spot.RoadSegmentDescription.replace(/'/g, "\\'")}'); google.maps.event.trigger(arguments[0], 'closeclick');" 
-                      style="width: 100%; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.3s ease;"
-                      onmouseover="this.style.background='linear-gradient(135deg, #059669, #047857)'; this.style.transform='translateY(-1px)'"
-                      onmouseout="this.style.background='linear-gradient(135deg, #10b981, #059669)'; this.style.transform='translateY(0)'">
-                🧭 Navigate Here
-              </button>
-            </div>
+           <button onclick="navigateToParking(${spot.Latitude}, ${spot.Longitude}, '${spot.RoadSegmentDescription.replace(/'/g, "\\'")}'); google.maps.event.trigger(arguments[0], 'closeclick');" 
+                   style="width: 100%; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.8rem; transition: all 0.3s ease;"
+                   onmouseover="this.style.background='linear-gradient(135deg, #059669, #047857)'"
+                   onmouseout="this.style.background='linear-gradient(135deg, #10b981, #059669)'">
+             🧭 Navigate
+           </button>
          </div>
        `
      });
