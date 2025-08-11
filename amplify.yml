@@ -3,13 +3,24 @@ frontend:
   phases:
     preBuild:
       commands:
-        - echo "No pre-build steps required for static HTML"
+        - npm i -D html-minifier-terser
     build:
       commands:
-        - echo "No build process required for static HTML"
+        # create an output folder
+        - rm -rf public && mkdir public
+        # copy your site files into /public (adjust paths if your site is in a subfolder)
+        - shopt -s dotglob; cp -R * public/; shopt -u dotglob
+        # minify all HTML in /public
+        - find public -name "*.html" -type f -exec npx html-minifier-terser \
+            --collapse-whitespace --remove-comments --minify-css true --minify-js true \
+            --remove-attribute-quotes true --remove-tag-whitespace true \
+            --sort-attributes true --sort-class-name true -o {} {} \;
+        # (optional) delete any source maps
+        - find public -name "*.map" -type f -delete || true
   artifacts:
-    baseDirectory: /
+    baseDirectory: public
     files:
       - '**/*'
   cache:
-    paths: []
+    paths:
+      - node_modules/**/*
