@@ -692,7 +692,7 @@
 <body>
   <!-- Header -->
   <header class="header">
-    <div class="logo">🅿️ Smart Parking Search</div>
+    <div class="logo">🅿️ Smart Parking Search - Intelligent Parking Solutions</div>
     <!-- Navigation Menu -->
     <nav class="header-nav" style="display: flex; align-items: center; gap: 2rem;">
       <a href="#about" class="nav-link" onclick="showAboutModal(); return false;" style="color: #667eea; text-decoration: none; font-weight: 500; transition: color 0.3s ease;">ℹ️ About Us</a>
@@ -1784,70 +1784,163 @@ function updateStatistics() {
  }
 
  // Load parking data from S3 or local CSV file
- async function loadParkingData() {
-   debugLog('Starting parking data load process...');
+async function loadParkingData() {
+  debugLog('Starting parking data load process...');
 
-   // S3 URL for the CSV file
-   const S3_CSV_URL = 'https://smartrouteparking.s3.ap-southeast-2.amazonaws.com/on-street-parking-bay-sensors.csv';
+  // S3 URLs for both CSV files
+  const PARKING_CSV_URL = 'https://smartrouteparking.s3.ap-southeast-2.amazonaws.com/on-street-parking-bay-sensors.csv';
+  const SEGMENTS_CSV_URL = 'https://smartrouteparking.s3.ap-southeast-2.amazonaws.com/kerbside_segments.csv';
 
-   // Try S3 first, then local file, then fallback to sample data
+  try {
+    debugLog('Loading both parking sensors and kerbside segments data...');
+    
+    // Load both CSV files in parallel
+    const [parkingResponse, segmentsResponse] = await Promise.all([
+      fetch(PARKING_CSV_URL, {
+        method: 'GET',
+        mode: 'cors',
+        headers: { 'Accept': 'text/csv,text/plain,*/*' }
+      }),
+      fetch(SEGMENTS_CSV_URL, {
+        method: 'GET',
+        mode: 'cors',
+        headers: { 'Accept': 'text/csv,text/plain,*/*' }
+      })
+    ]);
 
-   // Method 1: Try loading from S3
-   try {
-     debugLog('Attempting to load CSV from S3:', S3_CSV_URL);
-     const response = await fetch(S3_CSV_URL, {
-       method: 'GET',
-       mode: 'cors', // Enable CORS
-       headers: {
-         'Accept': 'text/csv,text/plain,*/*'
-       }
-     });
+    if (parkingResponse.ok && segmentsResponse.ok) {
+      const [parkingContent, segmentsContent] = await Promise.all([
+        parkingResponse.text(),
+        segmentsResponse.text()
+      ]);
 
-     debugLog(`S3 Response status: ${response.status} ${response.statusText}`);
-     debugLog(`S3 Response headers:`, Object.fromEntries(response.headers.entries()));
+      if (parkingContent.length > 100 && segmentsContent.length > 100) {
+        debugLog('SUCCESS: Both CSV files loaded from S3!');
+        debugLog(`Parking data size: ${parkingContent.length} characters`);
+        debugLog(`Segments data size: ${segmentsContent.length} characters`);
+        
+        // Parse the segments data first to create lookup table
+        const segmentsLookup = await parseKerbsideSegments(segmentsContent);
+        debugLog(`Created segments lookup with ${Object.keys(segmentsLookup).length} entries`);
+        // Then parse parking data with segments lookup
+        await parseCSVContent(parkingContent, segmentsLookup);
+        return;
+      }
+    }
+  } catch (error) {
+    debugLog('Error loading CSV files:', error);
+  }
+  
+  showS3Instructions();
+}
+ // Parse kerbside segments CSV to create lookup table
+ // Parse kerbside segments CSV to create lookup table
+async function parseKerbsideSegments(csvContent) {
+  debugLog('Parsing kerbside segments CSV...');
+  
+  const segmentsLookup = {};
+  
+  try {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) {
+      debugLog('ERROR: Segments CSV has insufficient lines:', lines.length);
+      return segmentsLookup;
+    }
 
-     if (response.ok) {
-       const csvContent = await response.text();
-       debugLog(`S3 Response content length: ${csvContent ? csvContent.length : 0} characters`);
+    // Parse headers
+    const headerLine = lines[0];
+    const headers = parseCSVLine(headerLine);
+    
+    debugLog('Segments CSV Headers found:', headers);
 
-       if (csvContent && csvContent.length > 100) {
-         debugLog(`SUCCESS: CSV loaded from S3! Content length: ${csvContent.length} characters`);
-         debugLog('First 200 characters:', csvContent.substring(0, 200));
-         await parseCSVContent(csvContent);
-         return;
-       } else {
-         debugLog('S3 response content is empty or too small');
-       }
-     } else {
-       debugLog(`S3 fetch failed with status: ${response.status} - ${response.statusText}`);
+    // Find column indices (more flexible search)
+    let kerbidIndex = -1;
+    let roadDescIndex = -1;
+    
+    headers.forEach((header, index) => {
+      const lowerHeader = header.toLowerCase().trim();
+      if (lowerHeader.includes('kerbid') || lowerHeader.includes('kerb_id') || lowerHeader === 'kerbsideid') {
+        kerbidIndex = index;
+      }
+      if (lowerHeader.includes('roadsegmentdescription') || 
+          lowerHeader.includes('road_segment_description') ||
+          lowerHeader.includes('description') ||
+          lowerHeader.includes('road_name') ||
+          lowerHeader.includes('street_name')) {
+        roadDescIndex = index;
+      }
+    });
+    
+    debugLog(`Column indices - kerbid: ${kerbidIndex}, roadSegmentDescription: ${roadDescIndex}`);
+    debugLog('Available headers:', headers);
 
-       // Try to read the error response
-       try {
-         const errorText = await response.text();
-         debugLog('S3 error response:', errorText);
-       } catch (e) {
-         debugLog('Could not read S3 error response');
-       }
-     }
-   } catch (error) {
-     debugLog('S3 loading error details:', {
-       name: error.name,
-       message: error.message,
-       stack: error.stack
-     });
+    if (kerbidIndex === -1 || roadDescIndex === -1) {
+      debugLog('ERROR: Could not find required columns in segments CSV');
+      debugLog('Looking for columns containing: kerbid, roadsegmentdescription, description');
+      return segmentsLookup;
+    }
 
-     // Check for specific error types
-     if (error.name === 'TypeError' && error.message.includes('CORS')) {
-       debugLog('CORS ERROR: S3 bucket needs CORS configuration');
-     } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-       debugLog('FETCH ERROR: Network or URL issue');
-     }
-   }
-   showS3Instructions();
- }
+    // Process each data row
+    let processedRows = 0;
+    let validRows = 0;
 
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      processedRows++;
+      
+      const values = parseCSVLine(line);
+      
+      if (values.length > Math.max(kerbidIndex, roadDescIndex)) {
+        const kerbid = values[kerbidIndex]?.trim();
+        const roadDescription = values[roadDescIndex]?.trim();
+        
+        if (kerbid && roadDescription && roadDescription !== '') {
+          segmentsLookup[kerbid] = roadDescription;
+          validRows++;
+          
+          // Log first few entries for verification
+          if (validRows <= 5) {
+            debugLog(`Sample mapping: KerbID ${kerbid} -> "${roadDescription}"`);
+          }
+        }
+      }
+    }
+
+    debugLog(`SUCCESS: Processed ${processedRows} segments, found ${validRows} valid kerbid-description mappings`);
+
+  } catch (error) {
+    debugLog('Error parsing segments CSV:', error);
+  }
+
+  return segmentsLookup;
+}
+
+
+// Helper function to parse CSV line handling quoted values
+function parseCSVLine(line) {
+  const values = [];
+  let currentValue = '';
+  let inQuotes = false;
+
+  for (let j = 0; j < line.length; j++) {
+    const char = line[j];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      values.push(currentValue.trim().replace(/^"|"$/g, ''));
+      currentValue = '';
+    } else {
+      currentValue += char;
+    }
+  }
+  values.push(currentValue.trim().replace(/^"|"$/g, ''));
+  
+  return values;
+}
  // Parse CSV content into parking data
- async function parseCSVContent(csvContent) {
+ async function parseCSVContent(csvContent, segmentsLookup = {}) {
    debugLog('Parsing CSV content...');
 
    try {
@@ -1947,7 +2040,19 @@ function updateStatistics() {
 
        spot.Latitude = spot.lat;
        spot.Longitude = spot.lon;
-       spot.RoadSegmentDescription = `Parking Bay ${spot.KerbsideID || 'Unknown'} (Zone ${spot.Zone_Number || 'N/A'})`;
+       
+       // Use segments lookup to get better road description based on kerbid
+       const kerbid = spot.KerbsideID?.toString() || spot.kerbid?.toString() || spot.Kerbid?.toString();
+       if (kerbid && segmentsLookup[kerbid]) {
+        spot.RoadSegmentDescription = segmentsLookup[kerbid];
+        debugLog(`Using road segment: KerbID ${kerbid} -> "${segmentsLookup[kerbid]}"`);
+       } else {
+        spot.RoadSegmentDescription = `Parking Bay ${spot.KerbsideID || spot.bay_id || 'Unknown'} (Zone ${spot.Zone_Number || 'N/A'})`;
+        if (kerbid) {
+          debugLog(`No segment description found for KerbID: ${kerbid}`);
+        }
+       }
+
        spot.RoadSegmentID = spot.KerbsideID || spot.Zone_Number;
        spot.LastUpdated = spot.Lastupdated || spot.Status_Timestamp || new Date().toISOString().split('T')[0];
        spot.st_marker_id = spot.KerbsideID;
