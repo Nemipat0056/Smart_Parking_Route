@@ -33,6 +33,84 @@
       top: 0;
       z-index: 1000;
     }
+        .nav-link:hover {
+      color: #5a67d8 !important;
+      transform: translateY(-1px);
+    }
+
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(5px);
+      animation: fadeIn 0.3s ease;
+    }
+
+    .modal-content {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9));
+      backdrop-filter: blur(20px);
+      margin: 2% auto;
+      padding: 0;
+      border-radius: 20px;
+      max-width: 900px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+      animation: slideIn 0.3s ease;
+      border: 1px solid rgba(102, 126, 234, 0.1);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateY(-50px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 1.5rem 2rem;
+      border-radius: 20px 20px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .close {
+      color: white;
+      font-size: 2rem;
+      font-weight: bold;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background-color 0.3s ease;
+    }
+
+    .close:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .modal-body {
+      padding: 2rem;
+    }
 
     .logo {
       font-size: 1.5rem;
@@ -183,10 +261,6 @@
       font-size: 1.3rem;
       margin-bottom: 1.5rem;
       font-weight: 700;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
     }
 
     .search-input-group {
@@ -619,6 +693,11 @@
   <!-- Header -->
   <header class="header">
     <div class="logo">🅿️ Smart Parking Search</div>
+    <!-- Navigation Menu -->
+    <nav class="header-nav" style="display: flex; align-items: center; gap: 2rem;">
+      <a href="#about" class="nav-link" onclick="showAboutModal(); return false;" style="color: #667eea; text-decoration: none; font-weight: 500; transition: color 0.3s ease;">ℹ️ About Us</a>
+      <a href="#contact" class="nav-link" onclick="showContactModal(); return false;" style="color: #667eea; text-decoration: none; font-weight: 500; transition: color 0.3s ease;">📞 Contact</a>
+    </nav>
     <div class="user-section">
       <div id="userGreeting" class="user-greeting">Loading...</div>
       <button id="logoutBtn" class="logout-btn" style="display: none;">Logout</button>
@@ -952,6 +1031,359 @@
       </div>
     </div>
   </div>
+
+  <!-- About Us Modal -->
+  <div id="aboutModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>ℹ️ About Smart Parking Search</h3>
+        <button class="close" onclick="closeModal('aboutModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Company Mission -->
+        <div class="search-section">
+          <h4>🎯 Our Mission</h4>
+          <p style="color: #374151; font-size: 1.1rem; line-height: 1.7; margin-bottom: 2rem;">
+            At Smart Parking Search, we're revolutionizing urban mobility by making parking intelligent, accessible, and sustainable. 
+            Our mission is to reduce traffic congestion, lower carbon emissions, and enhance the quality of urban life through 
+            innovative parking solutions.
+          </p>
+
+          <div class="parking-results-grid">
+            <div class="parking-spot">
+              <h5>🌍 Sustainability First</h5>
+              <p style="color: #6b7280; margin-bottom: 1rem;">
+                We believe technology should serve the environment. Our platform promotes eco-friendly transportation choices 
+                and helps users reduce their carbon footprint through smart parking decisions.
+              </p>
+              <div class="eco-badge">🌱 Green Technology</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>📊 Data-Driven Solutions</h5>
+              <p style="color: #6b7280; margin-bottom: 1rem;">
+                Using real-time sensor data, machine learning, and advanced analytics, we provide accurate parking information 
+                that saves time and reduces urban congestion.
+              </p>
+              <div class="ev-badge">🤖 AI-Powered</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>👥 Community Focused</h5>
+              <p style="color: #6b7280; margin-bottom: 1rem;">
+                We're committed to serving Melbourne's diverse communities with accessible, user-friendly solutions that 
+                work for everyone, from daily commuters to occasional visitors.
+              </p>
+              <div class="eco-badge">🤝 Inclusive Design</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Our Story -->
+        <div class="search-section">
+          <h4>📖 Our Story</h4>
+          <div class="insight-box">
+            Smart Parking Search was founded in 2025 by a team of Melbourne-based developers (TP10 Tornado Team), urban planners, and sustainability advocates. 
+            Frustrated by the daily struggle of finding parking in the city, we set out to create a solution that would benefit both 
+            individual drivers and the broader urban environment.
+          </div>
+
+          <div style="background: rgba(255, 255, 255, 0.8); padding: 1.5rem; border-radius: 12px; border-left: 4px solid white; margin: 1rem 0;">
+            <h5 style="color: #667eea; margin-bottom: 1rem;">🏆 Key Milestones</h5>
+            <div style="display: grid; gap: 0.8rem; font-size: 0.95rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span><strong>2025:</strong> Company founded with initial prototype</span>
+                <span style="background: #667eea; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">Founded</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span><strong>2025:</strong> Partnership with City of Melbourne for sensor data</span>
+                <span style="background: #10b981; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">Partnership</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span><strong>2025:</strong> Launch of real-time parking platform</span>
+                <span style="background: #f59e0b; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">Launch</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Our Team -->
+        <div class="search-section">
+          <h4>👨‍💼 Meet Our Team</h4>
+          <div class="parking-results-grid">
+            <div class="parking-spot">
+              <h5>🧠 Natnaree Patanrasd</h5>
+              <div class="parking-info">
+                <span>Role</span>
+                <span>Cybersecurity and Backend Developer</span>
+              </div>
+              <div class="parking-info">
+                <span>Background</span>
+                <span>Airline Business 6 years experiences</span>
+              </div>
+              <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+                Former Cabin Crew and Specialist Platform Analytics
+              </p>
+              <div class="ev-badge">🎓 Master of Cybersecurity</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>⚡ Haojun Sun</h5>
+              <div class="parking-info">
+                <span>Role</span>
+                <span>Backend Developer</span>
+              </div>
+              <div class="parking-info">
+                <span>Background</span>
+                <span>Software Engineering</span>
+              </div>
+              <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+                Former IT Engineer
+              </p>
+              <div class="ev-badge">🎓 Master of Information Technology</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>🌱 Xiaoyu Yin</h5>
+              <div class="parking-info">
+                <span>Role</span>
+                <span>Project Manager</span>
+              </div>
+              <div class="parking-info">
+                <span>Background</span>
+                <span>Project Manager</span>
+              </div>
+              <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+                
+              </p>
+              <div class="ev-badge">🎓 Master of Business Information System</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>🧠 Jing Gao</h5>
+              <div class="parking-info">
+                <span>Role</span>
+                <span>Project Manager</span>
+              </div>
+              <div class="parking-info">
+                <span>Background</span>
+                <span>Backend Developer</span>
+              </div>
+              <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+                
+              </p>
+              <div class="ev-badge">🎓 Master of Information Technology</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>⚡ Chengwei Peng</h5>
+              <div class="parking-info">
+                <span>Role</span>
+                <span>AI Engineer</span>
+              </div>
+              <div class="parking-info">
+                <span>Background</span>
+                <span></span>
+              </div>
+              <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+                
+              </p>
+              <div class="ev-badge">🎓 Master of Artificial Intelligent</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>🌱 Yangsheng Li</h5>
+              <div class="parking-info">
+                <span>Role</span>
+                <span>Data Engineer / QA </span>
+              </div>
+              <div class="parking-info">
+                <span>Background</span>
+                <span></span>
+              </div>
+              <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+                
+              </p>
+              <div class="ev-badge">🎓 Master of Data Scientist</div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Technology Stack -->
+        <div class="search-section">
+          <h4>🔧 Technology & Innovation</h4>
+          <p style="color: #6b7280; margin-bottom: 1.5rem;">
+            Our platform leverages cutting-edge technology to deliver accurate, real-time parking information:
+          </p>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <div style="background: rgba(102, 126, 234, 0.05); padding: 1rem; border-radius: 8px; border-left: 3px solid #667eea;">
+              <h6 style="color: #667eea; margin-bottom: 0.5rem;">📡 IoT Sensors</h6>
+              <p style="font-size: 0.9rem; color: #6b7280;">Real-time parking bay occupancy detection using ultrasonic and magnetic sensors.</p>
+            </div>
+            <div style="background: rgba(16, 185, 129, 0.05); padding: 1rem; border-radius: 8px; border-left: 3px solid #10b981;">
+              <h6 style="color: #10b981; margin-bottom: 0.5rem;">🤖 Machine Learning</h6>
+              <p style="font-size: 0.9rem; color: #6b7280;">Predictive algorithms for parking availability and demand forecasting.</p>
+            </div>
+            <div style="background: rgba(245, 158, 11, 0.05); padding: 1rem; border-radius: 8px; border-left: 3px solid #f59e0b;">
+              <h6 style="color: #f59e0b; margin-bottom: 0.5rem;">🗺️ Geospatial Analytics</h6>
+              <p style="font-size: 0.9rem; color: #6b7280;">Advanced mapping and location services powered by Google Maps API.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Us Modal -->
+  <div id="contactModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📞 Contact Smart Parking Search</h3>
+        <button class="close" onclick="closeModal('contactModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Contact Information -->
+        <div class="search-section">
+          <h4>📧 Get in Touch</h4>
+          <p style="color: #6b7280; font-size: 1.1rem; margin-bottom: 2rem;">
+            We'd love to hear from you! Whether you have questions, feedback, or partnership opportunities, 
+            our team is here to help.
+          </p>
+
+          <div class="parking-results-grid">
+            <div class="parking-spot">
+              <h5>🏢 Office Address</h5>
+              <div class="parking-info">
+                <span>Location</span>
+                <span>Level 15, 123 Collins Street</span>
+              </div>
+              <div class="parking-info">
+                <span>City</span>
+                <span>Melbourne, VIC 3000</span>
+              </div>
+              <div class="parking-info">
+                <span>Country</span>
+                <span>Australia</span>
+              </div>
+              <div class="eco-badge">📍 CBD Location</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>📱 Contact Details</h5>
+              <div class="parking-info">
+                <span>Phone</span>
+                <span>+61 3 9000 1234</span>
+              </div>
+              <div class="parking-info">
+                <span>Email</span>
+                <span>hello@smartparking.com.au</span>
+              </div>
+              <div class="parking-info">
+                <span>Support</span>
+                <span>support@smartparking.com.au</span>
+              </div>
+              <div class="ev-badge">24/7 Support</div>
+            </div>
+
+            <div class="parking-spot">
+              <h5>🕒 Business Hours</h5>
+              <div class="parking-info">
+                <span>Monday - Friday</span>
+                <span>9:00 AM - 6:00 PM</span>
+              </div>
+              <div class="parking-info">
+                <span>Saturday</span>
+                <span>10:00 AM - 4:00 PM</span>
+              </div>
+              <div class="parking-info">
+                <span>Sunday</span>
+                <span>Closed</span>
+              </div>
+              <div class="eco-badge">AEST Timezone</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contact Form -->
+        <div class="search-section">
+          <h4>✉️ Send us a Message</h4>
+          <form style="max-width: 600px;">
+            <div style="display: grid; gap: 1rem; margin-bottom: 1.5rem;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <input type="text" placeholder="Your Name" style="padding: 1rem; border: 2px solid rgba(102, 126, 234, 0.1); border-radius: 8px; font-size: 1rem;">
+                <input type="email" placeholder="Your Email" style="padding: 1rem; border: 2px solid rgba(102, 126, 234, 0.1); border-radius: 8px; font-size: 1rem;">
+              </div>
+              <select style="padding: 1rem; border: 2px solid rgba(102, 126, 234, 0.1); border-radius: 8px; font-size: 1rem;">
+                <option>General Inquiry</option>
+                <option>Technical Support</option>
+                <option>Partnership Opportunity</option>
+                <option>Feature Request</option>
+                <option>Bug Report</option>
+                <option>Media Inquiry</option>
+              </select>
+              <input type="text" placeholder="Subject" style="padding: 1rem; border: 2px solid rgba(102, 126, 234, 0.1); border-radius: 8px; font-size: 1rem;">
+              <textarea placeholder="Your Message" rows="5" style="padding: 1rem; border: 2px solid rgba(102, 126, 234, 0.1); border-radius: 8px; font-size: 1rem; resize: vertical; font-family: inherit;"></textarea>
+            </div>
+            <button type="submit" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 1rem 2rem; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;">
+              📧 Send Message
+            </button>
+          </form>
+        </div>
+
+        <!-- FAQ Section -->
+        <div class="search-section">
+          <h4>❓ Frequently Asked Questions</h4>
+          <div style="display: grid; gap: 1rem;">
+            <div style="background: rgba(255, 255, 255, 0.8); padding: 1.2rem; border-radius: 8px; border-left: 4px solid #667eea;">
+              <h6 style="color: #667eea; margin-bottom: 0.5rem;">How accurate is the real-time parking data?</h6>
+              <p style="color: #6b7280; font-size: 0.95rem; margin: 0;">
+                Our sensor data is updated every 30 seconds and has an accuracy rate of over 95%. However, availability can change rapidly in busy areas.
+              </p>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.8); padding: 1.2rem; border-radius: 8px; border-left: 4px solid #10b981;">
+              <h6 style="color: #10b981; margin-bottom: 0.5rem;">Is the service free to use?</h6>
+              <p style="color: #6b7280; font-size: 0.95rem; margin: 0;">
+                Yes! Our basic parking search and eco-planning features are completely free. We may introduce premium features in the future.
+              </p>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.8); padding: 1.2rem; border-radius: 8px; border-left: 4px solid #f59e0b;">
+              <h6 style="color: #f59e0b; margin-bottom: 0.5rem;">Do you cover areas outside Melbourne?</h6>
+              <p style="color: #6b7280; font-size: 0.95rem; margin: 0;">
+                Currently, we focus exclusively on Melbourne and surrounding suburbs. We plan to expand to other Australian cities in 2026.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Social Media & Links -->
+        <div class="search-section">
+          <h4>🌐 Connect With Us</h4>
+          <div class="parking-results-grid">
+            <div class="parking-spot" style="cursor: pointer;">
+              <h5>📘 Facebook</h5>
+              <p style="color: #6b7280;">Follow us for updates and community discussions</p>
+              <div style="background: #1877f2; color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; display: inline-block;">@SmartParkingMelb</div>
+            </div>
+            <div class="parking-spot" style="cursor: pointer;">
+              <h5>🐦 Twitter</h5>
+              <p style="color: #6b7280;">Real-time updates and parking tips</p>
+              <div style="background: #1da1f2; color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; display: inline-block;">@SmartParkingAU</div>
+            </div>
+            <div class="parking-spot" style="cursor: pointer;">
+              <h5>💼 LinkedIn</h5>
+              <p style="color: #6b7280;">Professional updates and industry insights</p>
+              <div style="background: #0a66c2; color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; display: inline-block;">Smart Parking Search</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+
+
 <!-- Google Maps API -->
 <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDwXzBClakuchQF0zxKk0UBkPhLX--d7tg&libraries=places&callback=initMaps"></script>
 
@@ -1656,6 +2088,43 @@ function updateStatistics() {
  function logout() {
    location.reload();
  }
+
+ // Modal functions
+ function showAboutModal() {
+   document.getElementById('aboutModal').style.display = 'block';
+   document.body.style.overflow = 'hidden';
+ }
+
+ function showContactModal() {
+   document.getElementById('contactModal').style.display = 'block';
+   document.body.style.overflow = 'hidden';
+ }
+
+ function closeModal(modalId) {
+   document.getElementById(modalId).style.display = 'none';
+   document.body.style.overflow = 'auto';
+ }
+
+ // Close modal when clicking outside
+ window.onclick = function(event) {
+   const aboutModal = document.getElementById('aboutModal');
+   const contactModal = document.getElementById('contactModal');
+   
+   if (event.target === aboutModal) {
+     closeModal('aboutModal');
+   }
+   if (event.target === contactModal) {
+     closeModal('contactModal');
+   }
+ }
+
+ // Close modal with Escape key
+ document.addEventListener('keydown', function(event) {
+   if (event.key === 'Escape') {
+     closeModal('aboutModal');
+     closeModal('contactModal');
+   }
+ });
 
  logoutBtn.addEventListener('click', logout);
 
