@@ -2782,7 +2782,7 @@ function getParkingRestrictions(zoneNumber) {
   const filterText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
   const restrictionText = restrictionFilter !== 'all' ? ` (${restrictionFilter} restrictions)` : '';
   document.getElementById('parkingResultsCount').innerText =
-    `Found ${spots.length}${filterText} parking spots${restrictionText} from Melbourne data`;
+    `Found ${spots.length}${filterText} best parking spots${restrictionText} from Melbourne data`;
 
   // Create parking spot cards with restrictions
   let resultsHTML = '';
