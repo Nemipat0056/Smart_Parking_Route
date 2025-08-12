@@ -2755,7 +2755,7 @@ function getParkingRestrictions(zoneNumber) {
     displayCSVParkingResults(topResults, location);
 
     // Add markers with same filters applied
-    addAllParkingMarkers(filteredSpots.slice(0, 100)); // Limit markers for performance
+    addAllParkingMarkers(filteredSpots); // Limit markers for performance
 
     const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
     const restrictionText = restrictionFilter !== 'all' ? ` with ${restrictionFilter} restrictions` : '';
