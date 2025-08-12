@@ -788,13 +788,15 @@
               </select>
             </label>
 
-            <label>Price Range:
-              <select id="priceRangeSelect">
-                <option value="all">Any Price</option>
-                <option value="free">Free</option>
-                <option value="low">$0-$5/hour</option>
-                <option value="medium">$5-$15/hour</option>
-                <option value="high">$15+/hour</option>
+            <label>Parking Restrictions:
+              <select id="restrictionSelect">
+                <option value="all">All Restrictions</option>
+                <option value="norestriction">No Restriction</option>
+                <option value="shortterm">Short Term (≤2hr)</option>
+                <option value="mediumterm">Medium Term (3-8hr)</option>
+                <option value="longterm">Long Term (>8hr)</option>
+                <option value="permit">Permit Only</option>
+                <option value="loading">Loading Zone</option>
               </select>
             </label>
 
@@ -1644,6 +1646,7 @@ function updateStatistics() {
  let userTokens = null;
  let isAuthenticated = false;
  let melbourneParkingData = [];
+ let restrictionsData = [];
  let greenParkingMap;
  let greenParkingAutocomplete;
  let greenParkingMarkers = [];
@@ -1823,15 +1826,16 @@ function updateStatistics() {
 async function loadParkingData() {
   debugLog('Starting parking data load process...');
 
-  // S3 URLs for both CSV files
+  // S3 URLs for all three CSV files
   const PARKING_CSV_URL = 'https://smartrouteparking.s3.ap-southeast-2.amazonaws.com/on-street-parking-bay-sensors.csv';
   const SEGMENTS_CSV_URL = 'https://smartrouteparking.s3.ap-southeast-2.amazonaws.com/kerbside_segments.csv';
+  const RESTRICTIONS_CSV_URL = 'https://smartrouteparking.s3.ap-southeast-2.amazonaws.com/sign-plates-located-in-each-parking-zone.csv';
 
   try {
-    debugLog('Loading both parking sensors and kerbside segments data...');
+    debugLog('Loading parking sensors, kerbside segments, and restrictions data...');
     
-    // Load both CSV files in parallel
-    const [parkingResponse, segmentsResponse] = await Promise.all([
+    // Load all three CSV files in parallel
+    const [parkingResponse, segmentsResponse, restrictionsResponse] = await Promise.all([
       fetch(PARKING_CSV_URL, {
         method: 'GET',
         mode: 'cors',
@@ -1841,24 +1845,51 @@ async function loadParkingData() {
         method: 'GET',
         mode: 'cors',
         headers: { 'Accept': 'text/csv,text/plain,*/*' }
+      }),
+      fetch(RESTRICTIONS_CSV_URL, {
+        method: 'GET',
+        mode: 'cors',
+        headers: { 'Accept': 'text/csv,text/plain,*/*' }
       })
     ]);
 
+    if (parkingResponse.ok && segmentsResponse.ok && restrictionsResponse.ok) {
+      const [parkingContent, segmentsContent, restrictionsContent] = await Promise.all([
+        parkingResponse.text(),
+        segmentsResponse.text(),
+        restrictionsResponse.text()
+      ]);
+
+      if (parkingContent.length > 100 && segmentsContent.length > 100 && restrictionsContent.length > 100) {
+        debugLog('SUCCESS: All three CSV files loaded from S3!');
+        debugLog(`Parking data size: ${parkingContent.length} characters`);
+        debugLog(`Segments data size: ${segmentsContent.length} characters`);
+        debugLog(`Restrictions data size: ${restrictionsContent.length} characters`);
+        
+        // Parse restrictions data FIRST
+        await parseRestrictionsData(restrictionsContent);
+        debugLog(`Loaded ${restrictionsData.length} restriction entries`);
+
+        // Parse the segments data to create lookup table
+        const segmentsLookup = await parseKerbsideSegments(segmentsContent);
+        debugLog(`Created segments lookup with ${Object.keys(segmentsLookup).length} entries`);
+        
+        // Then parse parking data with both lookups
+        await parseCSVContent(parkingContent, segmentsLookup);
+        return;
+      }
+    }
+    
+    // If one or more files failed, try with just parking and segments
     if (parkingResponse.ok && segmentsResponse.ok) {
+      debugLog('WARNING: Restrictions data failed to load, continuing with parking and segments only');
       const [parkingContent, segmentsContent] = await Promise.all([
         parkingResponse.text(),
         segmentsResponse.text()
       ]);
-
+      
       if (parkingContent.length > 100 && segmentsContent.length > 100) {
-        debugLog('SUCCESS: Both CSV files loaded from S3!');
-        debugLog(`Parking data size: ${parkingContent.length} characters`);
-        debugLog(`Segments data size: ${segmentsContent.length} characters`);
-        
-        // Parse the segments data first to create lookup table
         const segmentsLookup = await parseKerbsideSegments(segmentsContent);
-        debugLog(`Created segments lookup with ${Object.keys(segmentsLookup).length} entries`);
-        // Then parse parking data with segments lookup
         await parseCSVContent(parkingContent, segmentsLookup);
         return;
       }
@@ -1975,6 +2006,206 @@ function parseCSVLine(line) {
   
   return values;
 }
+
+// Parse restrictions CSV to create lookup table
+async function parseRestrictionsData(csvContent) {
+  debugLog('Parsing restrictions CSV...');
+  
+  restrictionsData = [];
+  
+  try {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) {
+      debugLog('ERROR: Restrictions CSV has insufficient lines:', lines.length);
+      return;
+    }
+
+    const headerLine = lines[0];
+    const headers = parseCSVLine(headerLine);
+    
+    debugLog('Restrictions CSV Headers found:', headers);
+
+    // Find column indices - more flexible search
+    let zoneNumberIndex = -1;
+    let restrictionDisplayIndex = -1;
+    let restrictionDaysIndex = -1;
+    let restrictionTimeIndex = -1;
+    
+    headers.forEach((header, index) => {
+      const lowerHeader = header.toLowerCase().trim();
+      if (lowerHeader.includes('zone_number') || lowerHeader.includes('zonenumber') || lowerHeader.includes('zone')) {
+        zoneNumberIndex = index;
+      }
+      if (lowerHeader.includes('restriction_display') || lowerHeader.includes('restriction') || lowerHeader.includes('sign_description') || lowerHeader.includes('description')) {
+        restrictionDisplayIndex = index;
+      }
+      if (lowerHeader.includes('restriction_days') || lowerHeader.includes('days')) {
+        restrictionDaysIndex = index;
+      }
+      if (lowerHeader.includes('restriction_time') || lowerHeader.includes('time') || lowerHeader.includes('hours')) {
+        restrictionTimeIndex = index;
+      }
+    });
+
+    debugLog(`Restrictions column indices - zone: ${zoneNumberIndex}, display: ${restrictionDisplayIndex}, days: ${restrictionDaysIndex}, time: ${restrictionTimeIndex}`);
+
+    if (zoneNumberIndex === -1 || restrictionDisplayIndex === -1) {
+      debugLog('ERROR: Could not find required columns in restrictions CSV');
+      debugLog('Available headers:', headers);
+      return;
+    }
+
+    // Process each data row
+    let validRestrictions = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const values = parseCSVLine(line);
+      
+      if (values.length > Math.max(zoneNumberIndex, restrictionDisplayIndex)) {
+        const zoneNumber = values[zoneNumberIndex]?.trim();
+        const restrictionDisplay = values[restrictionDisplayIndex]?.trim();
+        const restrictionDays = restrictionDaysIndex >= 0 ? values[restrictionDaysIndex]?.trim() : '';
+        const restrictionTime = restrictionTimeIndex >= 0 ? values[restrictionTimeIndex]?.trim() : '';
+        
+        if (zoneNumber && restrictionDisplay) {
+          restrictionsData.push({
+            zone_number: parseInt(zoneNumber),
+            restriction_display: restrictionDisplay,
+            restriction_days: restrictionDays || 'All Days',
+            restriction_time: restrictionTime || '',
+            category: categorizeRestriction(restrictionDisplay)
+          });
+          validRestrictions++;
+          
+          // Log first few for verification
+          if (validRestrictions <= 5) {
+            debugLog(`Sample restriction: Zone ${zoneNumber} -> "${restrictionDisplay}" (${categorizeRestriction(restrictionDisplay)})`);
+          }
+        }
+      }
+    }
+
+    debugLog(`SUCCESS: Loaded ${validRestrictions} restriction entries`);
+    populateRestrictionsDropdown();
+
+  } catch (error) {
+    debugLog('Error parsing restrictions CSV:', error);
+  }
+}
+
+// ADD THIS FUNCTION - completely new
+function populateRestrictionsDropdown() {
+  const restrictionSelect = document.getElementById('restrictionSelect');
+  
+  if (!restrictionsData || restrictionsData.length === 0) {
+    debugLog('No restrictions data available for dropdown');
+    return;
+  }
+  
+  // Get unique restriction displays from the data
+  const uniqueRestrictions = [...new Set(restrictionsData.map(r => r.restriction_display))]
+    .filter(display => display && display.trim() !== '')
+    .sort(); // Sort alphabetically
+  
+  debugLog(`Found ${uniqueRestrictions.length} unique restriction types:`, uniqueRestrictions.slice(0, 5));
+  
+  // Clear existing options except "All Restrictions"
+  restrictionSelect.innerHTML = '<option value="all">All Restrictions</option>';
+  
+  // Add each unique restriction as an option
+  uniqueRestrictions.forEach(restriction => {
+    const option = document.createElement('option');
+    option.value = restriction;
+    option.textContent = restriction;
+    restrictionSelect.appendChild(option);
+  });
+  
+  debugLog(`Populated restrictions dropdown with ${uniqueRestrictions.length} real restriction options`);
+}
+
+function categorizeRestriction(restrictionText) {
+  if (!restrictionText) return 'unknown';
+  
+  const text = restrictionText.toLowerCase();
+  
+  // No restriction categories
+  if (text.includes('no restrictions') || text.includes('unrestricted') || 
+      text.includes('no time limit') || text.includes('free parking')) {
+    return 'norestriction';
+  }
+  
+  // Loading zones
+  if (text.includes('loading') || text.includes('goods vehicles') || 
+      text.includes('commercial') || text.includes('delivery')) {
+    return 'loading';
+  }
+  
+  // Permit only
+  if (text.includes('permit') || text.includes('resident') || 
+      text.includes('authorized') || text.includes('staff only')) {
+    return 'permit';
+  }
+  
+  // Time-based restrictions - extract hours
+  const hourMatch = text.match(/(\d+)\s*(hr|hour|hrs|hours)/i);
+  if (hourMatch) {
+    const hours = parseInt(hourMatch[1]);
+    if (hours <= 2) return 'shortterm';
+    if (hours <= 8) return 'mediumterm';
+    return 'longterm';
+  }
+
+  // Minute-based short term
+  if (text.includes('30 min') || text.includes('45 min') || text.includes('1 hour')) {
+    return 'shortterm';
+  }
+  
+  // No stopping/parking
+  if (text.includes('no stopping') || text.includes('no parking') || 
+      text.includes('clearway') || text.includes('bus zone')) {
+    return 'norestriction'; // Actually means no parking allowed
+  }
+  
+  return 'unknown';
+}
+
+// 4. ENHANCED: Updated getParkingRestrictions function
+function getParkingRestrictions(zoneNumber) {
+  if (!restrictionsData || restrictionsData.length === 0) {
+    return { 
+      display: 'No restrictions data available', 
+      days: 'Unknown', 
+      time: '',
+      category: 'unknown' 
+    };
+  }
+
+  // Find all restrictions for this zone (there might be multiple)
+  const zoneRestrictions = restrictionsData.filter(r => r.zone_number === parseInt(zoneNumber));
+  
+  if (!zoneRestrictions || zoneRestrictions.length === 0) {
+    return { 
+      display: 'No specific restrictions found', 
+      days: 'All Days', 
+      time: '',
+      category: 'norestriction' 
+    };
+  }
+
+  // If multiple restrictions, pick the most restrictive or primary one
+  const primaryRestriction = zoneRestrictions[0];
+
+  return {
+    display: primaryRestriction.restriction_display,
+    days: primaryRestriction.restriction_days,
+    time: primaryRestriction.restriction_time,
+    category: primaryRestriction.category,
+    allRestrictions: zoneRestrictions // Include all for detailed view
+  };
+}
+
  // Parse CSV content into parking data
  async function parseCSVContent(csvContent, segmentsLookup = {}) {
    debugLog('Parsing CSV content...');
@@ -2290,6 +2521,16 @@ function parseCSVLine(line) {
    }
  });
 
+  document.getElementById('restrictionSelect').addEventListener('change', function() {
+   if (parkingResultsSection.style.display !== 'none') {
+     debugLog('Restriction filter changed, re-filtering results...');
+     const location = parkingLocationInput.value.trim();
+     if (location) {
+       searchParking();
+     }
+   }
+ });
+
  // Eco planning event listeners
  setTimeout(() => {
    const calculateEcoBtn = document.getElementById('calculateEcoBtn');
@@ -2417,28 +2658,28 @@ function parseCSVLine(line) {
 }
 
  function searchNearbyParking(location) {
-   debugLog('Searching for parking near location:', location.toString());
+  debugLog('Searching for parking near location:', location.toString());
 
-   // Clear existing markers and results
-   parkingMarkers.forEach(marker => marker.setMap(null));
-   parkingMarkers = [];
-   parkingResultsSection.style.display = 'none';
+  // Clear existing markers and results
+  parkingMarkers.forEach(marker => marker.setMap(null));
+  parkingMarkers = [];
+  parkingResultsSection.style.display = 'none';
 
-   const maxDistance = parseFloat(document.getElementById('maxDistanceSelect').value);
+  const maxDistance = parseFloat(document.getElementById('maxDistanceSelect').value);
 
-   parkingMap.setCenter(location);
-   adjustMapZoomForDistance();
+  parkingMap.setCenter(location);
+  adjustMapZoomForDistance();
 
-   // Update status
-   parkingSearchStatus.innerText = '🔍 Finding parking spots nearby...';
-   parkingSearchStatus.className = 'info';
+  // Update status
+  parkingSearchStatus.innerText = '🔍 Finding parking spots nearby...';
+  parkingSearchStatus.className = 'info';
 
-   // Use CSV data to find nearby parking spots
-   const nearbySpots = findNearbyParkingSpots(location.lat(), location.lng(), maxDistance);
-   if (nearbySpots && nearbySpots.length > 0) {
-     
-    // Add status based on sensor data or generate random status
-     const spotsWithStatus = nearbySpots.map(spot => {
+  // Use CSV data to find nearby parking spots
+  const nearbySpots = findNearbyParkingSpots(location.lat(), location.lng(), maxDistance);
+  if (nearbySpots && nearbySpots.length > 0) {
+    
+    // Add status and restrictions to each spot
+    const spotsWithDetails = nearbySpots.map(spot => {
       let finalStatus = 'free'; // default 
       if (spot.Status_Description) {
         if (spot.Status_Description.toLowerCase() === 'unoccupied') {
@@ -2449,278 +2690,323 @@ function parseCSVLine(line) {
           finalStatus = ['free', 'occupied', 'reserved'][Math.floor(Math.random() * 3)];
         }
       } else {
-        // If no sensor data, assign random status
         finalStatus = ['free', 'occupied', 'reserved'][Math.floor(Math.random() * 3)];
       }
+
+      // Get restrictions for this spot
+      const restrictions = getParkingRestrictions(spot.Zone_Number);
+      
       return {
         ...spot,
-        status: finalStatus
+        status: finalStatus,
+        restrictions: restrictions
       };
-     });
-     
+    });
 
-     // Filter based on parking type if needed
-     const parkingType = document.getElementById('parkingTypeSelect').value;
-     let filteredSpots = spotsWithStatus;
+    // Apply all filters
+    let filteredSpots = spotsWithDetails;
 
-     if (parkingType !== 'all') {
-       filteredSpots = spotsWithStatus.filter(spot => {
-         const desc = spot.RoadSegmentDescription ? spot.RoadSegmentDescription.toLowerCase() : '';
-         switch (parkingType) {
-           case 'street':
-             return desc.includes('street') || desc.includes('road') || desc.includes('avenue');
-           case 'garage':
-             return desc.includes('garage') || desc.includes('building') || desc.includes('car park');
-           case 'lot':
-             return desc.includes('lot') || desc.includes('park') && !desc.includes('national');
-           case 'private':
-             return desc.includes('private') || desc.includes('secure');
-           default:
-             return true;
-         }
-       });
-     }
+    // Filter by parking type
+    const parkingType = document.getElementById('parkingTypeSelect').value;
+    if (parkingType !== 'all') {
+      filteredSpots = filteredSpots.filter(spot => {
+        const desc = spot.RoadSegmentDescription ? spot.RoadSegmentDescription.toLowerCase() : '';
+        switch (parkingType) {
+          case 'street':
+            return desc.includes('street') || desc.includes('road') || desc.includes('avenue');
+          case 'garage':
+            return desc.includes('garage') || desc.includes('building') || desc.includes('car park');
+          case 'lot':
+            return desc.includes('lot') || desc.includes('park') && !desc.includes('national');
+          case 'private':
+            return desc.includes('private') || desc.includes('secure');
+          default:
+            return true;
+        }
+      });
+    }
 
-     // Filter based on availability
-     const availabilityFilter = document.getElementById('availabilitySelect').value;
-     if (availabilityFilter !== 'all') {
-       const statusMap = {
-         'available': 'free',
-         'occupied': 'occupied',
-         'reserved': 'reserved'
-       };
-       filteredSpots = filteredSpots.filter(spot => spot.status === statusMap[availabilityFilter]);
-     }
+    // Filter by availability
+    const availabilityFilter = document.getElementById('availabilitySelect').value;
+    if (availabilityFilter !== 'all') {
+      const statusMap = {
+        'available': 'free',
+        'occupied': 'occupied',
+        'reserved': 'reserved'
+      };
+      filteredSpots = filteredSpots.filter(spot => spot.status === statusMap[availabilityFilter]);
+    }
 
-     // Limit to top 20 results for better performance
-     const topResults = filteredSpots.slice(0, 20);
+    // FIXED: Filter by restrictions
+    const restrictionFilter = document.getElementById('restrictionSelect').value;
+    if (restrictionFilter !== 'all') {
+      debugLog(`Applying restriction filter: ${restrictionFilter}`);
+      const beforeCount = filteredSpots.length;
+      filteredSpots = filteredSpots.filter(spot => {
+        return spot.restrictions && spot.restrictions.display === restrictionFilter;
+      });
+      const afterCount = filteredSpots.length;
+      debugLog(`Restriction filter results: ${beforeCount} -> ${afterCount} spots`);
+    }
 
-     displayCSVParkingResults(topResults, location);
+    // Limit to top 20 results for better performance
+    const topResults = filteredSpots.slice(0, 20);
 
-     // Add markers ONLY for the filtered results (same availability filter applied)
-     const markerResults = filteredSpots;
-     addAllParkingMarkers(markerResults);
+    displayCSVParkingResults(topResults, location);
 
-     const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
-     parkingSearchStatus.innerText = `✅ Found ${markerResults.length}${availabilityText} parking spots nearby (${markerResults.length} shown on map)`;
-     parkingSearchStatus.className = 'success';
-     parkingResultsSection.style.display = 'block';
-   } else {
-     const availabilityFilter = document.getElementById('availabilitySelect').value;
-     const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
-     parkingSearchStatus.innerText = `❌ No${availabilityText} parking spots found in this area. Try adjusting your filters.`;
-     parkingSearchStatus.className = 'error';
-   }
+    // Add markers with same filters applied
+    addAllParkingMarkers(filteredSpots.slice(0, 100)); // Limit markers for performance
 
-   // Re-enable search button
-   searchParkingBtn.disabled = false;
- }
+    const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
+    const restrictionText = restrictionFilter !== 'all' ? ` with ${restrictionFilter} restrictions` : '';
+    parkingSearchStatus.innerText = `✅ Found ${filteredSpots.length}${availabilityText} parking spots${restrictionText} nearby`;
+    parkingSearchStatus.className = 'success';
+    parkingResultsSection.style.display = 'block';
+  } else {
+    const availabilityFilter = document.getElementById('availabilitySelect').value;
+    const restrictionFilter = document.getElementById('restrictionSelect').value;
+    const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
+    const restrictionText = restrictionFilter !== 'all' ? ` with ${restrictionFilter} restrictions` : '';
+    parkingSearchStatus.innerText = `❌ No${availabilityText} parking spots${restrictionText} found in this area. Try adjusting your filters.`;
+    parkingSearchStatus.className = 'error';
+  }
+
+  // Re-enable search button
+  searchParkingBtn.disabled = false;
+}
 
  function displayCSVParkingResults(spots, searchLocation) {
-   // Update results count
-   const availabilityFilter = document.getElementById('availabilitySelect').value;
-   const filterText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
-   document.getElementById('parkingResultsCount').innerText =
-     `Found ${spots.length}${filterText} best parking spots from Melbourne data`;
+  // Update results count
+  const availabilityFilter = document.getElementById('availabilitySelect').value;
+  const restrictionFilter = document.getElementById('restrictionSelect').value;
+  const filterText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
+  const restrictionText = restrictionFilter !== 'all' ? ` (${restrictionFilter} restrictions)` : '';
+  document.getElementById('parkingResultsCount').innerText =
+    `Found ${spots.length}${filterText} parking spots${restrictionText} from Melbourne data`;
 
-   // Create parking spot cards
-   let resultsHTML = '';
-   spots.forEach((spot, index) => {
-     // Extract street name for cleaner display
-     const streetName = spot.RoadSegmentDescription ?
-       spot.RoadSegmentDescription.split(' between')[0] : 'Parking Spot';
+  // Create parking spot cards with restrictions
+  let resultsHTML = '';
+  spots.forEach((spot, index) => {
+    // Extract street name for cleaner display
+    const streetName = spot.RoadSegmentDescription ?
+      spot.RoadSegmentDescription.split(' between')[0] : 'Parking Spot';
 
-     // Check if this spot has real sensor data
-     const hasRealStatus = spot.Status_Description && ['unoccupied', 'present'].includes(spot.Status_Description.toLowerCase());
-     
-     // Use real sensor status if available, otherwise use assigned status
-     let finalStatus;
-     if (hasRealStatus) {
-        finalStatus = spot.Status_Description.toLowerCase() === 'unoccupied' ? 'free' : 'occupied';
-      } else {
-        finalStatus = spot.status || 'free';
-      }
+    // Check if this spot has real sensor data
+    const hasRealStatus = spot.Status_Description && ['unoccupied', 'present'].includes(spot.Status_Description.toLowerCase());
+    
+    // Use real sensor status if available, otherwise use assigned status
+    let finalStatus;
+    if (hasRealStatus) {
+       finalStatus = spot.Status_Description.toLowerCase() === 'unoccupied' ? 'free' : 'occupied';
+     } else {
+       finalStatus = spot.status || 'free';
+     }
 
+    // Status display text and styling
+    const statusConfig = {
+      free: { text: 'Available', class: 'status-free', emoji: '🟢' },
+      occupied: { text: 'Occupied', class: 'status-occupied', emoji: '🔴' },
+      reserved: { text: 'Reserved', class: 'status-reserved', emoji: '🟡' }
+    };
 
-     // Determine if updated recently (within last year)
-     const lastUpdated = new Date(spot.LastUpdated);
-     const isRecent = lastUpdated > new Date('2023-01-01');
+    const status = statusConfig[finalStatus];
 
-     // Use the status from the spot (added during search)
-     //const finalStatus = spot.status || 'free';
+    // Restrictions display
+    const restrictions = spot.restrictions || {};
+    const restrictionDisplay = restrictions.display || 'No restrictions data';
+    const restrictionCategory = restrictions.category || 'unknown';
+    
+    // Restriction category colors
+    const restrictionColors = {
+      'norestriction': 'rgba(16, 185, 129, 0.1); color: #059669',
+      'shortterm': 'rgba(245, 158, 11, 0.1); color: #d97706',
+      'mediumterm': 'rgba(59, 130, 246, 0.1); color: #2563eb',
+      'longterm': 'rgba(16, 185, 129, 0.1); color: #059669',
+      'permit': 'rgba(239, 68, 68, 0.1); color: #dc2626',
+      'loading': 'rgba(168, 85, 247, 0.1); color: #7c3aed',
+      'unknown': 'rgba(107, 114, 128, 0.1); color: #4b5563'
+    };
 
-     // Status display text and styling
-     const statusConfig = {
-       free: { text: 'Available', class: 'status-free', emoji: '🟢' },
-       occupied: { text: 'Occupied', class: 'status-occupied', emoji: '🔴' },
-       reserved: { text: 'Reserved', class: 'status-reserved', emoji: '🟡' }
-     };
+    const restrictionStyle = restrictionColors[restrictionCategory] || restrictionColors['unknown'];
 
-     const status = statusConfig[finalStatus];
+    resultsHTML += `
+      <div class="parking-spot">
+        <h5>
+          🅿️ ${streetName}
+          <span class="status-indicator ${status.class}"></span>
+        </h5>
+        <div class="parking-info">
+          <span>Status</span>
+          <span style="background: ${finalStatus === 'free' ? 'rgba(16, 185, 129, 0.1); color: #059669' : finalStatus === 'occupied' ? 'rgba(239, 68, 68, 0.1); color: #dc2626' : 'rgba(245, 158, 11, 0.1); color: #d97706'}">${status.emoji} ${status.text}</span>
+        </div>
+        <div class="parking-info">
+          <span>Restrictions</span>
+          <span style="background: ${restrictionStyle}; font-size: 0.85rem; max-width: 200px; word-wrap: break-word;">${restrictionDisplay.length > 30 ? restrictionDisplay.substring(0, 30) + '...' : restrictionDisplay}</span>
+        </div>
+        ${restrictions.days && restrictions.days !== 'All Days' ? `
+        <div class="parking-info">
+          <span>Days</span>
+          <span>📅 ${restrictions.days}</span>
+        </div>` : ''}
+        ${restrictions.time ? `
+        <div class="parking-info">
+          <span>Time</span>
+          <span>🕒 ${restrictions.time}</span>
+        </div>` : ''}
+        <div class="parking-info">
+          <span>Distance</span>
+          <span>📍 ${spot.distance}m away</span>
+        </div>
+        <div class="parking-info">
+          <span>Bay ID</span>
+          <span>#${spot.KerbsideID || spot.RoadSegmentID}</span>
+        </div>
+        <div class="parking-info">
+          <span>Zone</span>
+          <span>🏢 ${spot.Zone_Number || 'N/A'}</span>
+        </div>         
+        <div class="parking-info">
+          <span>Last Updated</span>
+          <span>🕒 ${spot.LastUpdated}</span>
+        </div>
+        ${hasRealStatus ? '<div class="eco-badge">📡 Real Sensor Data</div>' : '<div class="ev-badge">🎯 Estimated Status</div>'}
+        ${restrictionCategory === 'norestriction' ? '<div class="eco-badge">✅ No Restrictions</div>' : ''}
+        ${restrictionCategory === 'shortterm' ? '<div class="ev-badge">⏰ Short Term</div>' : ''}
+        ${restrictionCategory === 'longterm' ? '<div class="eco-badge">🅿️ Long Term</div>' : ''}
+        ${restrictionCategory === 'permit' ? '<div class="ev-badge" style="background: linear-gradient(135deg, #ef4444, #dc2626);">🚫 Permit Required</div>' : ''}
+        ${spot.KerbsideID ? '<div class="ev-badge">🏷️ Tracked Spot</div>' : ''}
+        <div class="parking-actions">
+          <button class="navigate-btn" onclick="navigateToParking(${spot.Latitude}, ${spot.Longitude}, '${streetName.replace(/'/g, "\\'")}')">
+            🧭 Navigate
+          </button>
+        </div>
+      </div>
+    `;
+  });
 
-     resultsHTML += `
-       <div class="parking-spot">
-         <h5>
-           🅿️ ${streetName}
-           <span class="status-indicator ${status.class}"></span>
-         </h5>
-         <div class="parking-info">
-           <span>Status</span>
-           <span style="background: ${finalStatus === 'free' ? 'rgba(16, 185, 129, 0.1); color: #059669' : finalStatus === 'occupied' ? 'rgba(239, 68, 68, 0.1); color: #dc2626' : 'rgba(245, 158, 11, 0.1); color: #d97706'}">${status.emoji} ${status.text}</span>
-         </div>
-         <div class="parking-info">
-           <span>Location</span>
-           <span>${spot.RoadSegmentDescription.length > 30 ? spot.RoadSegmentDescription.substring(0, 30) + '...' : spot.RoadSegmentDescription}</span>
-         </div>
-         <div class="parking-info">
-           <span>Distance</span>
-           <span>📍 ${spot.distance}m away</span>
-         </div>
-         <div class="parking-info">
-           <span>Bay ID</span>
-           <span>#${spot.KerbsideID  || spot.RoadSegmentID}</span>
-         </div>
-         <div class="parking-info">
-           <span>Zone</span>
-           <span>🏢 ${spot.Zone_Number || 'N/A'}</span>
-         </div>         
-         <div class="parking-info">
-           <span>Last Updated</span>
-           <span>🕒 ${spot.LastUpdated}</span>
-         </div>
-         ${hasRealStatus ? '<div class="eco-badge">📡 Real Sensor Data</div>' : '<div class="ev-badge">🎯 Estimated Status</div>'}
-         ${isRecent ? '<div class="eco-badge">✅ Recently Updated</div>' : ''}
-         ${spot.KerbsideID ? '<div class="ev-badge">🏷️ Tracked Spot</div>' : ''}
-         <div class="parking-actions">
-           <button class="navigate-btn" onclick="navigateToParking(${spot.Latitude}, ${spot.Longitude}, '${streetName.replace(/'/g, "\\'")}')">
-             🧭 Navigate
-           </button>
-         </div>
-       </div>
-     `;
-   });
-
-   parkingResultsGrid.innerHTML = resultsHTML;
- }
+  parkingResultsGrid.innerHTML = resultsHTML;
+}
 
  // Load real parking data for Melbourne (ALL areas) - ONLY real data, no samples
  function loadRealParkingData() {
-   debugLog('loadRealParkingData called');
-   parkingSearchStatus.innerText = '🔍 Loading Melbourne parking spots from real data...';
-   parkingSearchStatus.className = 'info';
+  debugLog('loadRealParkingData called with restrictions support');
+  parkingSearchStatus.innerText = '🔍 Loading Melbourne parking spots with restrictions data...';
+  parkingSearchStatus.className = 'info';
 
-   // Clear existing markers
-   parkingMarkers.forEach(marker => marker.setMap(null));
-   parkingMarkers = [];
+  // Clear existing markers
+  parkingMarkers.forEach(marker => marker.setMap(null));
+  parkingMarkers = [];
 
-   // Check if we have real parking data loaded
-   if (!melbourneParkingData || melbourneParkingData.length === 0) {
-     debugLog('ERROR: No real parking data available');
-     parkingSearchStatus.innerText = '❌ No real parking data loaded. Check S3 configuration.';
-     parkingSearchStatus.className = 'error';
-     parkingResultsSection.style.display = 'none';
-     return;
-   }
+  // Check if we have real parking data loaded
+  if (!melbourneParkingData || melbourneParkingData.length === 0) {
+    debugLog('ERROR: No real parking data available');
+    parkingSearchStatus.innerText = '❌ No real parking data loaded. Check S3 configuration.';
+    parkingSearchStatus.className = 'error';
+    parkingResultsSection.style.display = 'none';
+    return;
+  }
 
-   debugLog(`Processing ${melbourneParkingData.length} real parking data points from entire Melbourne`);
+  debugLog(`Processing ${melbourneParkingData.length} real parking data points with restrictions`);
+  debugLog(`Restrictions data available: ${restrictionsData.length} entries`);
 
-   // Get current distance filter
-   const maxDistance = parseFloat(document.getElementById('maxDistanceSelect').value);
+  // Get current filters
+  const maxDistance = parseFloat(document.getElementById('maxDistanceSelect').value);
+  const restrictionFilter = document.getElementById('restrictionSelect').value;
 
-   // Analyze the geographic distribution of real parking data within distance
-   const allSpots = melbourneParkingData.map(spot => {
-     const distance = Math.round(
-       Math.sqrt(
-         Math.pow((spot.Latitude - MELBOURNE_CENTER.lat) * 111000, 2) +
-         Math.pow((spot.Longitude - MELBOURNE_CENTER.lng) * 111000, 2)
-       )
-     );
-     return { ...spot, distance };
-   }).filter(spot => spot.distance <= maxDistance * 1000); // Filter by distance in meters
+  // Process all spots with restrictions
+  const allSpots = melbourneParkingData.map(spot => {
+    const distance = Math.round(
+      Math.sqrt(
+        Math.pow((spot.Latitude - MELBOURNE_CENTER.lat) * 111000, 2) +
+        Math.pow((spot.Longitude - MELBOURNE_CENTER.lng) * 111000, 2)
+      )
+    );
+    
+    // Add restrictions to each spot
+    const restrictions = getParkingRestrictions(spot.Zone_Number);
+    
+    return { 
+      ...spot, 
+      distance,
+      restrictions,
+      status: ['free', 'occupied', 'reserved'][Math.floor(Math.random() * 3)]
+    };
+  }).filter(spot => spot.distance <= maxDistance * 1000); // Filter by distance
 
-   // Add random status to spots
-   const spotsWithStatus = allSpots.map(spot => ({
-     ...spot,
-     status: ['free', 'occupied', 'reserved'][Math.floor(Math.random() * 3)]
-   }));
+  // Apply restriction filter
+  let filteredSpots = allSpots;
+  if (restrictionFilter !== 'all') {
+    debugLog(`Applying restriction filter: ${restrictionFilter}`);
+    const beforeCount = filteredSpots.length;
+    filteredSpots = allSpots.filter(spot => {
+      return spot.restrictions && spot.restrictions.display === restrictionFilter;
+    });
+    const afterCount = filteredSpots.length;
+    debugLog(`Restriction filter results: ${beforeCount} -> ${afterCount} spots`);
+  }
 
-   // Apply availability filter
-   const availabilityFilter = document.getElementById('availabilitySelect').value;
-   let filteredSpots = spotsWithStatus;
-   if (availabilityFilter !== 'all') {
-     const statusMap = {
-       'available': 'free',
-       'occupied': 'occupied',
-       'reserved': 'reserved'
-     };
-     filteredSpots = spotsWithStatus.filter(spot => spot.status === statusMap[availabilityFilter]);
-   }
+  // Apply availability filter
+  const availabilityFilter = document.getElementById('availabilitySelect').value;
+  if (availabilityFilter !== 'all') {
+    const statusMap = {
+      'available': 'free',
+      'occupied': 'occupied',
+      'reserved': 'reserved'
+    };
+    filteredSpots = filteredSpots.filter(spot => spot.status === statusMap[availabilityFilter]);
+  }
 
-   // Group spots by distance to see real distribution
-   const spotsByDistance = {
-     cbd: filteredSpots.filter(s => s.distance <= 2000),      // Within 2km of center
-     inner: filteredSpots.filter(s => s.distance > 2000 && s.distance <= 10000),  // 2-10km
-     outer: filteredSpots.filter(s => s.distance > 10000)     // Beyond 10km
-   };
+  // Group for analysis
+  const spotsByDistance = {
+    cbd: filteredSpots.filter(s => s.distance <= 2000),
+    inner: filteredSpots.filter(s => s.distance > 2000 && s.distance <= 10000),
+    outer: filteredSpots.filter(s => s.distance > 10000)
+  };
 
-   debugLog(`Filtered parking distribution (${maxDistance}km): CBD (${spotsByDistance.cbd.length}), Inner (${spotsByDistance.inner.length}), Outer (${spotsByDistance.outer.length})`);
+  debugLog(`Filtered parking with restrictions (${maxDistance}km, ${restrictionFilter}): CBD (${spotsByDistance.cbd.length}), Inner (${spotsByDistance.inner.length}), Outer (${spotsByDistance.outer.length})`);
 
-   // Sample spots from different areas for display (but all from real data)
-   const displaySpots = [];
+  // Sample spots for display
+  const displaySpots = [];
+  displaySpots.push(...spotsByDistance.cbd.slice(0, 40));
+  displaySpots.push(...spotsByDistance.inner.slice(0, 40));
+  displaySpots.push(...spotsByDistance.outer.slice(0, 20));
 
-   // Add CBD spots
-   displaySpots.push(...spotsByDistance.cbd.slice(0, 40));
+  const sortedSpots = displaySpots.sort((a, b) => a.distance - b.distance);
 
-   // Add inner Melbourne spots
-   displaySpots.push(...spotsByDistance.inner.slice(0, 40));
+  if (sortedSpots && sortedSpots.length > 0) {
+    displayCSVParkingResults(sortedSpots, { lat: () => MELBOURNE_CENTER.lat, lng: () => MELBOURNE_CENTER.lng });
 
-   // Add outer Melbourne spots
-   displaySpots.push(...spotsByDistance.outer.slice(0, 20));
+    const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
+    const restrictionText = restrictionFilter !== 'all' ? ` with ${restrictionFilter} restrictions` : '';
+    parkingSearchStatus.innerText = `✅ Loaded ${filteredSpots.length}${availabilityText} Melbourne parking spots${restrictionText} within ${maxDistance}km`;
+    parkingSearchStatus.className = 'success';
+    parkingResultsSection.style.display = 'block';
 
-   // Sort by distance for results display
-   const sortedSpots = displaySpots.sort((a, b) => a.distance - b.distance);
+    // Add markers with restrictions info
+    const allMarkerSpots = [];
+    for (let i = 0; i < spotsByDistance.cbd.length; i += 10) {
+      allMarkerSpots.push(spotsByDistance.cbd[i]);
+    }
+    for (let i = 0; i < spotsByDistance.inner.length; i += 20) {
+      allMarkerSpots.push(spotsByDistance.inner[i]);
+    }
+    for (let i = 0; i < spotsByDistance.outer.length; i += 50) {
+      allMarkerSpots.push(spotsByDistance.outer[i]);
+    }
 
-   debugLog(`Selected ${sortedSpots.length} real parking spots for display within ${maxDistance}km`);
+    addAllParkingMarkers(allMarkerSpots);
+    debugLog(`Added ${allMarkerSpots.length} markers with restrictions data`);
 
-   if (sortedSpots && sortedSpots.length > 0) {
-     displayCSVParkingResults(sortedSpots, { lat: () => MELBOURNE_CENTER.lat, lng: () => MELBOURNE_CENTER.lng });
+    adjustMapZoomForDistance();
 
-     const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
-     parkingSearchStatus.innerText = `✅ Loaded ${filteredSpots.length}${availabilityText} REAL Melbourne parking spots within ${maxDistance}km (${spotsByDistance.cbd.length} CBD, ${spotsByDistance.inner.length} inner, ${spotsByDistance.outer.length} outer suburbs)`;
-     parkingSearchStatus.className = 'success';
-     parkingResultsSection.style.display = 'block';
-
-     // Add real parking spots as markers, sampled for performance and filtered by distance
-     const allMarkerSpots = [];
-     // Sample every 10th spot from CBD
-     for (let i = 0; i < spotsByDistance.cbd.length; i += 10) {
-       allMarkerSpots.push(spotsByDistance.cbd[i]);
-     }
-     // Sample every 20th spot from inner
-     for (let i = 0; i < spotsByDistance.inner.length; i += 20) {
-       allMarkerSpots.push(spotsByDistance.inner[i]);
-     }
-     // Sample every 50th spot from outer
-     for (let i = 0; i < spotsByDistance.outer.length; i += 50) {
-       allMarkerSpots.push(spotsByDistance.outer[i]);
-     }
-
-     addAllParkingMarkers(allMarkerSpots);
-     debugLog(`Added ${allMarkerSpots.length} markers from real data within ${maxDistance}km range`);
-
-     adjustMapZoomForDistance();
-
-     // Adjust map zoom based on distance filter
-     
-
-   } else {
-     debugLog('No real parking spots available for display within distance');
-     const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
-     parkingSearchStatus.innerText = `❌ No${availabilityText} real parking data available within ${maxDistance}km.`;
-     parkingSearchStatus.className = 'error';
-     parkingResultsSection.style.display = 'none';
-   }
- }
+  } else {
+    const availabilityText = availabilityFilter !== 'all' ? ` ${availabilityFilter}` : '';
+    const restrictionText = restrictionFilter !== 'all' ? ` with ${restrictionFilter} restrictions` : '';
+    parkingSearchStatus.innerText = `❌ No${availabilityText} parking spots${restrictionText} available within ${maxDistance}km.`;
+    parkingSearchStatus.className = 'error';
+    parkingResultsSection.style.display = 'none';
+  }
+}
 
  // Add function to display many markers on map
  function addAllParkingMarkers(spots) {
