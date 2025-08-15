@@ -2110,18 +2110,103 @@ function populateRestrictionsDropdown() {
   
   debugLog(`Found ${uniqueRestrictions.length} unique restriction types:`, uniqueRestrictions.slice(0, 5));
   
-  // Clear existing options except "All Restrictions"
-  restrictionSelect.innerHTML = '<option value="all">All Restrictions</option>';
+  // Function to convert raw restriction to user-friendly label
+  function getUserFriendlyLabel(restriction) {
+    const text = restriction.toLowerCase();
+    const original = restriction.toUpperCase();
+    
+    // Loading zones (contains "LZ")
+    if (text.includes('lz')) {
+      return `Loading Zone - ${original}`;
+    }
+    
+    // Sunday restrictions (contains 'FP1P', 'FP2P', etc.)
+    if (text.includes('fp') && text.includes('p')) {
+      const hours = text.replace('fp', '').replace('p', '');
+      return `Sunday Only (${hours}hr limit) - ${original}`;
+    }
+    
+    // Monday to Friday restrictions (contains 'MP2P' or 'DP2P')
+    if (text.includes('mp') && text.includes('p')) {
+      const hours = text.replace('mp', '').replace('p', '');
+      return `Weekdays Only (${hours}hr limit) - ${original}`;
+    }
+    
+    if (text.includes('dp') && text.includes('p')) {
+      const hours = text.replace('dp', '').replace('p', '');
+      return `Weekdays Only (${hours}hr limit) - ${original}`;
+    }
+    
+    // Time-based parking (like "2P", "1P", "4P", etc.)
+    if (text.match(/^\d+p$/)) {
+      const hours = parseInt(text.replace('p', ''));
+      if (hours <= 2) {
+        return `Quick Stop (${hours}hr limit) - ${original}`;
+      } else if (hours <= 8) {
+        return `Half Day (${hours}hr limit) - ${original}`;
+      } else {
+        return `All Day (${hours}hr limit) - ${original}`;
+      }
+    }
+    
+    // Permit parking
+    if (text.includes('permit') || text.includes('resident') || text.includes('staff')) {
+      return `Residents/Permit Only - ${original}`;
+    }
+    
+    // General loading zones (if not caught by LZ above)
+    if (text.includes('loading') || text.includes('goods') || text.includes('commercial')) {
+      return `Loading Zone - ${original}`;
+    }
+    
+    // No restrictions
+    if (text.includes('no restriction') || text.includes('unrestricted') || text.includes('free')) {
+      return `Free Parking - ${original}`;
+    }
+    
+    // Minute-based parking (like "30 min", "45 min")
+    if (text.includes('min')) {
+      return `Quick Stop - ${original}`;
+    }
+    
+    // Hour-based restrictions (like "2 hour", "4 hour")
+    const hourMatch = text.match(/(\d+)\s*(hr|hour)/);
+    if (hourMatch) {
+      const hours = parseInt(hourMatch[1]);
+      if (hours <= 2) {
+        return `Quick Stop (${hours}hr) - ${original}`;
+      } else if (hours <= 8) {
+        return `Half Day (${hours}hr) - ${original}`;
+      } else {
+        return `All Day (${hours}hr) - ${original}`;
+      }
+    }
+    
+    // Default: return original with "Other" prefix
+    return `Other - ${original}`;
+  }
   
-  // Add each unique restriction as an option
-  uniqueRestrictions.forEach(restriction => {
+  // Clear existing options
+  restrictionSelect.innerHTML = '<option value="all">Show All Parking Types</option>';
+  
+  // Create array of options with user-friendly labels
+  const optionPairs = uniqueRestrictions.map(restriction => ({
+    value: restriction,
+    label: getUserFriendlyLabel(restriction)
+  }));
+  
+  // Sort by the user-friendly label alphabetically
+  optionPairs.sort((a, b) => a.label.localeCompare(b.label));
+  
+  // Add sorted options to dropdown
+  optionPairs.forEach(pair => {
     const option = document.createElement('option');
-    option.value = restriction;
-    option.textContent = restriction;
+    option.value = pair.value;  // Keep original value for filtering
+    option.textContent = pair.label;  // User-friendly display
     restrictionSelect.appendChild(option);
   });
   
-  debugLog(`Populated restrictions dropdown with ${uniqueRestrictions.length} real restriction options`);
+  debugLog(`Populated restrictions dropdown with ${uniqueRestrictions.length} user-friendly restriction options (sorted alphabetically)`);
 }
 
 function categorizeRestriction(restrictionText) {
