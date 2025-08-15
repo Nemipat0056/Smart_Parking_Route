@@ -2134,18 +2134,18 @@ function populateRestrictionsDropdown() {
     
     if (text.includes('dp') && text.includes('p')) {
       const hours = text.replace('dp', '').replace('p', '');
-      return `Weekdays Only (${hours}hr limit) - ${original}`;
+      return `Everyday (${hours}hr limit) - ${original}`;
     }
     
     // Time-based parking (like "2P", "1P", "4P", etc.)
     if (text.match(/^\d+p$/)) {
       const hours = parseInt(text.replace('p', ''));
       if (hours <= 2) {
-        return `Quick Stop (${hours}hr limit) - ${original}`;
+        return `Weekdays Only (${hours}hr limit) - ${original}`;
       } else if (hours <= 8) {
-        return `Half Day (${hours}hr limit) - ${original}`;
+        return `Weekdays Only (${hours}hr limit) - ${original}`;
       } else {
-        return `All Day (${hours}hr limit) - ${original}`;
+        return `Weekdays Only (${hours}hr limit) - ${original}`;
       }
     }
     
