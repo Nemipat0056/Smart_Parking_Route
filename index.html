@@ -208,6 +208,8 @@
       align-items: center;
       justify-content: center;
       gap: 0.5rem;
+      text-align: center;
+      white-space: nowrap;
     }
 
     .tab-button:hover {
@@ -229,6 +231,29 @@
       right: 0;
       height: 3px;
       background: linear-gradient(135deg, #667eea, #764ba2);
+    }
+
+    /* Mobile-specific tab styles */
+    @media (max-width: 768px) {
+      .tab-button {
+        padding: 1.2rem 0.5rem;
+        font-size: 0.85rem;
+        gap: 0.3rem;
+        flex-direction: column;
+        min-height: 80px;
+      }
+      
+      .tab-button:active {
+        background: rgba(102, 126, 234, 0.2);
+        transform: scale(0.98);
+      }
+      
+      /* Since hover doesn't work well on mobile, use active state */
+      .tab-button:focus {
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+        outline: none;
+      }
     }
 
     /* Tab Content Styles */
